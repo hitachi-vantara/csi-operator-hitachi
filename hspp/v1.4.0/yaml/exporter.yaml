@@ -1,0 +1,120 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: storage-exporter-serviceaccount
+  namespace: hspc-monitoring-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: storage-exporter-clusterrole
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "persistentvolumes", "persistentvolumeclaims"]
+    verbs: ["list", "get"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["list", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: storage-exporter-clusterrolebinding
+roleRef:
+  kind: ClusterRole
+  name: storage-exporter-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: storage-exporter-serviceaccount
+    namespace: hspc-monitoring-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-exporter
+  namespace: hspc-monitoring-system
+  labels:
+    app: storage-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage-exporter
+  template:
+    metadata:
+      labels:
+        app: storage-exporter
+    spec:
+      serviceAccountName: storage-exporter-serviceaccount
+      containers:
+        - name: storage-exporter
+          image: hitachiedge1.jfrog.io/hitachicsi-oci-oss/storage-plugin-for-prometheus:v1.4.0
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: 80m
+              memory: 48Mi
+            limits:
+              cpu: 150m
+              memory: 64Mi
+          env:
+            - name: SPC_PUSHGATEWAY_URL
+              value: http://pushgateway:9091
+            # If you mind many log outputs, set ENABLE_DEBUG_LOG "false".
+            - name: SPC_ENABLE_DEBUG_LOG
+              value: "true"
+          volumeMounts:
+            - name: config
+              mountPath: /spc/storage-exporter/config/storage-exporter.yaml
+              subPath: storage-exporter.yaml
+              readOnly: true
+      volumes:
+        - name: config
+          secret:
+            secretName: storage-exporter-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pushgateway
+  namespace: hspc-monitoring-system
+  labels:
+    app: pushgateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pushgateway
+  template:
+    metadata:
+      labels:
+        app: pushgateway
+    spec:
+      containers:
+        - name: pushgateway
+          image: docker.io/prom/pushgateway:v1.4.3
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: 40m
+              memory: 25Mi
+            limits:
+              cpu: 60m
+              memory: 45Mi
+          ports:
+            - containerPort: 9091
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pushgateway
+  namespace: hspc-monitoring-system
+  labels:
+    app: pushgateway
+spec:
+  ports:
+    - port: 9091
+      targetPort: 9091
+  selector:
+    app: pushgateway
