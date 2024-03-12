@@ -1,0 +1,21 @@
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: hspc-monitoring-scc
+allowPrivilegedContainer: true
+runAsUser:
+  type: RunAsAny
+fsGroup:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+users:
+- system:serviceaccount:hspc-monitoring-system:default
+- system:serviceaccount:hspc-monitoring-system:storage-exporter-serviceaccount
