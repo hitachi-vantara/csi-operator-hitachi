@@ -1,0 +1,447 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hspc-csi-sa
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hspc-csi-cluster-role
+rules:
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["*"]
+- apiGroups: ["snapshot.storage.k8s.io"]
+  resources: ["volumesnapshots", "volumesnapshotclasses", "volumesnapshotcontents", "volumesnapshotcontents/status", "volumesnapshots/status"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["create", "delete", "get", "list", "watch", "update", "patch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims/status"]
+  verbs: ["update", "patch"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["volumeattachments"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["volumeattachments/status"]
+  verbs: ["patch"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses","csinodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["list", "watch", "create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["pods", "namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - csiutil.hitachi.com
+  resources:
+  - spcnodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hspc-csi-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hspc-csi-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: hspc-csi-sa
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hspc-csi-controller-service
+  namespace: kube-system
+spec:
+  selector:
+    app: hspc-csi
+  ports:
+  - port: 24224
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hspc-csi-controller
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hspc-csi
+  template:
+    metadata:
+      labels:
+        app: hspc-csi
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/controlplane
+        operator: "Equal"
+        value: "true"
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/etcd
+        operator: "Exists"
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/controlplane
+                operator: Exists
+      serviceAccount: hspc-csi-sa
+      containers:
+      - name: csi-provisioner
+        args:
+        - --csi-address=/csi/csi-controller.sock
+        - --timeout=400s
+        - --v=5
+        - --worker-threads=20
+        - --default-fstype=ext4
+        image: registry.k8s.io/sig-storage/csi-provisioner@sha256:49b94f975603d85a1820b72b1188e5b351d122011b3e5351f98c49d72719aa78
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 30m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+      - name: external-attacher
+        args:
+        - -v=5
+        - -csi-address=$(ADDRESS)
+        - -timeout=400s
+        - -default-fstype=ext4
+        env:
+        - name: ADDRESS
+          value: /csi/csi-controller.sock
+        image: registry.k8s.io/sig-storage/csi-attacher@sha256:11b955fe4da278aa0e8ca9d6fd70758f2aec4b0c1e23168c665ca345260f1882
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 30m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+      - name: csi-resizer
+        image: registry.k8s.io/sig-storage/csi-resizer@sha256:8b9354b49c04564d9902e9b1ae6b323ba8f6ecd2d4a8e0bd4870192d1c586bd0
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 30m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+        args:
+        - --csi-address=$(ADDRESS)
+        - --v=5
+        - --timeout=400s
+        env:
+        - name: ADDRESS
+          value: /csi/csi-controller.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /csi
+      - name: csi-snapshotter
+        image: registry.k8s.io/sig-storage/csi-snapshotter@sha256:4c5a1b57e685b2631909b958487f65af7746361346fcd82a8635bea3ef14509d
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 30m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+        args:
+        - --csi-address=$(ADDRESS)
+        - --timeout=400s
+        - --v=5
+        env:
+        - name: ADDRESS
+          value: /csi/csi-controller.sock
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /csi
+      - name: liveness-probe
+        image: registry.k8s.io/sig-storage/livenessprobe@sha256:4a1e22167d03746e6748cdc41b6374262c666bc85999e90112edc236dfb2c95a
+        imagePullPolicy: IfNotPresent
+        args:
+        - --csi-address=/csi/csi-controller.sock
+        - --v=5
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 30m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+      - name: hspc-csi-driver
+        env:
+        - name: CSI_ENDPOINT
+          value: unix:///csi/csi-controller.sock
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: hitachiedge1.jfrog.io/hitachicsi-oci-oss/hspc-csi-driver:v3.14.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 30m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+        ports:
+        - containerPort: 9808
+          name: healthz
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: healthz
+          initialDelaySeconds: 15
+          timeoutSeconds: 3
+          periodSeconds: 120
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: healthz
+          initialDelaySeconds: 15
+          timeoutSeconds: 3
+          periodSeconds: 120
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - mountPath: /etc/host-os-release
+          name: release-file
+          readOnly: true
+        - mountPath: /etc/iscsi/initiatorname.iscsi
+          name: iscsi-dir
+      volumes:
+      - emptyDir: {}
+        name: socket-dir
+      - hostPath:
+          path: /etc/os-release
+        name: release-file
+      - hostPath:
+          path: /etc/localtime
+        name: localtime
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: iscsi-dir
+        hostPath:
+          path: /etc/iscsi/initiatorname.iscsi
+      - name: hspc-td-config
+        configMap:
+          name: hspc-td-config
+      - name: runsh
+        configMap:
+          name: hspc-td-config
+          defaultMode: 0700
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hspc-csi-node
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: hspc-csi-driver
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: hspc-csi-driver
+    spec:
+      serviceAccount: hspc-csi-sa
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: driver-registrar
+        args:
+        - -v=5
+        - -csi-address=/csi/csi.sock
+        - -kubelet-registration-path=/var/lib/kubelet/plugins/hspc.csi.hitachi.com/csi.sock
+        env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: registry.k8s.io/sig-storage/csi-node-driver-registrar@sha256:a18e989a93722e43885120e90bc1d0da0740fcbf44bc10403572b368b9800606
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 30m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - name: registration-dir
+          mountPath: /registration
+      - name: hspc-csi-driver
+        env:
+        - name: CSI_ENDPOINT
+          value: unix:///csi/csi.sock
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: hitachiedge1.jfrog.io/hitachicsi-oci-oss/hspc-csi-driver:v3.14.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["SYS_ADMIN"]
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 30m
+          limits:
+            memory: 500Mi
+            cpu: 500m
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        - mountPath: /var/lib/kubelet
+          mountPropagation: Bidirectional
+          name: kubelet-dir
+        - mountPath: /dev
+          name: device-dir
+        - mountPath: /sys
+          name: sys-dir
+        - mountPath: /etc/iscsi/initiatorname.iscsi
+          name: iscsi-dir
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        - mountPath: /etc/host-os-release
+          name: release-file
+          readOnly: true
+        - mountPath: /host
+          mountPropagation: Bidirectional
+          name: host-dir
+      volumes:
+      - hostPath:
+          path: /var/lib/kubelet/plugins/hspc.csi.hitachi.com
+          type: DirectoryOrCreate
+        name: socket-dir
+      - hostPath:
+          path: /var/lib/kubelet
+          type: DirectoryOrCreate
+        name: kubelet-dir
+      - hostPath:
+          path: /etc/os-release
+        name: release-file
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+      - name: device-dir
+        hostPath:
+          path: /dev
+      - name: sys-dir
+        hostPath:
+          path: /sys
+      - name: iscsi-dir
+        hostPath:
+          path: /etc/iscsi/initiatorname.iscsi
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: hspc-td-config
+        configMap:
+          name: hspc-td-config
+      - name: runsh
+        configMap:
+          name: hspc-td-config
+          defaultMode: 0700
+      - name: registration-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins_registry
+          type: Directory
+      - name: host-dir
+        hostPath:
+          path: /
