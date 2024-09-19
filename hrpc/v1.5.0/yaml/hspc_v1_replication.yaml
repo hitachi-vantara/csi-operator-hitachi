@@ -1,0 +1,7 @@
+apiVersion: hspc.hitachi.com/v1
+kind: Replication
+metadata:
+  name: replication-sample
+spec:
+  persistentVolumeClaimName: pvc-xxxx
+  storageClassName: sc-hspc-dr
