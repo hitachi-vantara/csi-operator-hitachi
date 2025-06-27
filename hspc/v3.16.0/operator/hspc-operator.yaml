@@ -1176,7 +1176,7 @@ spec:
         - --enable-leader-election
         command:
         - /manager
-        image: registry.hitachivantara.com/hitachicsi-oci-oss/hspc-operator:v1.15.0
+        image: registry.hitachivantara.com/hitachicsi-oci-oss/hspc-operator:v1.16.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

@@ -234,7 +234,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
-        image: hitachiedge1.jfrog.io/hitachicsi-oci-oss/hspc-csi-driver:v3.15.0
+        image: registry.hitachivantara.com/hitachicsi-oci-oss/hspc-csi-driver:v3.15.0
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true
@@ -339,7 +339,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
-        image: hitachiedge1.jfrog.io/hitachicsi-oci-oss/hspc-csi-driver:v3.15.0
+        image: registry.hitachivantara.com/hitachicsi-oci-oss/hspc-csi-driver:v3.15.0
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true

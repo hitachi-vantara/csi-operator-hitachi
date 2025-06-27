@@ -1287,7 +1287,7 @@ spec:
         - --enable-leader-election
         command:
         - /manager
-        image: hitachiedge1.jfrog.io/hitachicsi-oci-oss/hspc-operator:v1.13.0
+        image: registry.hitachivantara.com/hitachicsi-oci-oss/hspc-operator:v1.13.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

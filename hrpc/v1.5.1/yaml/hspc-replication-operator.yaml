@@ -939,7 +939,7 @@ spec:
           value: /spc/replication/config/storage-secrets.yaml
         - name: SPC_REPLICATION_REMOTE_KUBECONFIG
           value: /spc/replication/config/remote-kubeconfig
-        image: hitachiedge1.jfrog.io/hitachicsi-oci-oss/hspc-replication-operator:v1.5.1
+        image: registry.hitachivantara.com/hitachicsi-oci-oss/hspc-replication-operator:v1.5.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

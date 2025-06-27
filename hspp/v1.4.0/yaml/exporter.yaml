@@ -49,7 +49,7 @@ spec:
       serviceAccountName: storage-exporter-serviceaccount
       containers:
         - name: storage-exporter
-          image: hitachiedge1.jfrog.io/hitachicsi-oci-oss/storage-plugin-for-prometheus:v1.4.0
+          image: registry.hitachivantara.com/hitachicsi-oci-oss/storage-plugin-for-prometheus:v1.4.0
           imagePullPolicy: Always
           resources:
             requests:
