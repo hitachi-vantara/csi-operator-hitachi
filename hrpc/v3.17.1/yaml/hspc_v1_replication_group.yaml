@@ -1,0 +1,6 @@
+apiVersion: hspc.hitachi.com/v1
+kind: ReplicationGroup
+metadata:
+  name: replicationgroup-sample
+spec:
+  desiredPairState: split
