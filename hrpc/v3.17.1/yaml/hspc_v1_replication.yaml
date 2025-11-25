@@ -1,0 +1,16 @@
+apiVersion: hspc.hitachi.com/v1
+kind: Replication
+metadata:
+  name: replication-sample
+spec:
+  persistentVolumeClaimName: pvc-xxxx
+  storageClassName: sc-hspc-dr
+  copyGroupName: spc-cpy_ur_55_58
+  copyPairName: spc-cust-pair1
+  replicationType: UR
+  consistencyGroupId: "11"
+  svolJournalId: "30"
+  pvolJournalId: "30"
+  isConsistency: false
+  fenceLevel: DATA
+  parentName: sample-replicationgroup

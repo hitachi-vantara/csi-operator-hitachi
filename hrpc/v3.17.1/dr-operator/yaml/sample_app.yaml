@@ -1,0 +1,141 @@
+---
+# ------------------- Namespaces -------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-db
+
+# ------------------- UI PVC + Pod -------------------
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-ui-pvc
+  namespace: demo-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: sc-1007576-iscsi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-pod-ui
+  namespace: demo-app
+  labels:
+    app: sample_app
+    tier: demo-ui
+spec:
+  containers:
+    - name: my-busybox
+      image: busybox
+      command: ["sleep", "1000000"]
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: sample-volume
+          mountPath: "/data"
+  volumes:
+    - name: sample-volume
+      persistentVolumeClaim:
+        claimName: demo-ui-pvc
+  restartPolicy: Never
+
+# ------------------- Server PVC + Pod -------------------
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-server-pvc
+  namespace: demo-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: sc-1007576-iscsi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-nginx-pod
+  namespace: demo-app
+  labels:
+    app: sample_app
+    tier: demo-server
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+      ports:
+        - containerPort: 80
+      volumeMounts:
+        - name: web-content
+          mountPath: /usr/share/nginx/html
+      command: ["/bin/sh"]
+      args:
+        - -c
+        - |
+          echo '<h1>Hello from PVC-backed Nginx!</h1>' > /usr/share/nginx/html/index.html && \
+          nginx -g 'daemon off;'
+  volumes:
+    - name: web-content
+      persistentVolumeClaim:
+        claimName: demo-server-pvc
+  restartPolicy: Never
+
+# ------------------- Database PVC + Deployment -------------------
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-db-pvc
+  namespace: demo-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: sc-1007576-iscsi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-pod-db
+  namespace: demo-db
+  labels:
+    app: sample_app
+    tier: demo-database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample_app
+      tier: demo-database
+  template:
+    metadata:
+      labels:
+        app: sample_app
+        tier: demo-database
+    spec:
+      containers:
+        - name: my-busybox
+          image: busybox
+          command: ["sleep", "1000000"]
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: sample-volume
+              mountPath: "/data"
+      volumes:
+        - name: sample-volume
+          persistentVolumeClaim:
+            claimName: demo-db-pvc

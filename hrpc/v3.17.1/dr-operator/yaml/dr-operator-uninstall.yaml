@@ -1,0 +1,795 @@
+#apiVersion: v1
+#kind: Namespace
+#metadata:
+#  labels:
+#    app.kubernetes.io/managed-by: kustomize
+#    app.kubernetes.io/name: hspc-dr-operator
+#    control-plane: controller-manager
+#  name: hspc-replication-operator-system
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: drpolicies.hspc.hitachi.com
+spec:
+  group: hspc.hitachi.com
+  names:
+    kind: DRPolicy
+    listKind: DRPolicyList
+    plural: drpolicies
+    singular: drpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.drSource.clusterName
+      name: Source_Cluster
+      type: string
+    - jsonPath: .spec.drTarget.clusterName
+      name: Target_Cluster
+      type: string
+    - jsonPath: .spec.replicationMode
+      name: Replication_Type
+      type: string
+    - jsonPath: .spec.desiredState
+      name: Desired_State
+      type: string
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .status.consistencyGroupId
+      name: CTG_Id
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: DRPolicy is the Schema for the drpolicies API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DRPolicySpec defines the desired state of DRPolicy.
+            properties:
+              actionsOnTarget:
+                items:
+                  description: ActionsOnTarget defines a post-storage-failover action
+                  properties:
+                    configMapRef:
+                      description: ConfigMapRef identifies the configmap and key
+                      properties:
+                        key:
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - key
+                      - name
+                      type: object
+                    scriptType:
+                      enum:
+                      - shell
+                      - ansible
+                      type: string
+                  required:
+                  - configMapRef
+                  - scriptType
+                  type: object
+                type: array
+              consistencyGroupName:
+                description: The consistency group name, required when consistencyRequired=true
+                type: string
+              consistencyRequired:
+                default: false
+                description: If true, the replication must use a consistency group
+                type: boolean
+              desiredState:
+                description: |-
+                  Using pointer to allow empty value (nil in this case) and still be able to use webhook based validation.
+                  This has one to one correspondence with the Replication CR's DesiredPairState field.
+                enum:
+                - pair
+                - split
+                - failover
+                - failback
+                - swap-resync
+                type: string
+              drSource:
+                description: This is set by the controller, and used by the secondary
+                  site to sync to the primary site
+                properties:
+                  clusterName:
+                    type: string
+                  primaryJournalID:
+                    type: string
+                  secondaryJournalID:
+                    type: string
+                  storageSystemName:
+                    type: string
+                required:
+                - clusterName
+                type: object
+              drTarget:
+                description: DRTarget defines the DR destination and journal IDs
+                properties:
+                  clusterName:
+                    type: string
+                  primaryJournalID:
+                    type: string
+                  secondaryJournalID:
+                    type: string
+                  storageSystemName:
+                    type: string
+                required:
+                - clusterName
+                type: object
+              primaryJournalId:
+                description: The primaryJournalId, secondaryJournalId, required when
+                  consistencyRequired=true
+                type: integer
+              pvcSelector:
+                description: PVCSelector defines how PVCs are selected
+                properties:
+                  matchNamespaces:
+                    description: Selects all PVCs in these namespaces
+                    items:
+                      type: string
+                    type: array
+                  matchPvcs:
+                    description: Selects PVCs explicitly by name
+                    items:
+                      type: string
+                    type: array
+                  matchWorkloadLabels:
+                    description: Matches Deployments or StatefulSets based on labels
+                    items:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    type: array
+                type: object
+              readyOrderOfPvcByLabel:
+                items:
+                  additionalProperties:
+                    type: string
+                  type: object
+                type: array
+              readyOrderOfPvcByNamespace:
+                items:
+                  type: string
+                type: array
+              replicationAttribute:
+                description: Using pointer to allow empty value (nil in this case)
+                  and still be able to use webhook based validation
+                enum:
+                - primary
+                - secondary
+                type: string
+              replicationMode:
+                enum:
+                - sync
+                - async
+                type: string
+              secondaryJournalId:
+                type: integer
+            required:
+            - drTarget
+            - pvcSelector
+            - replicationMode
+            type: object
+          status:
+            description: DRPolicyStatus defines the observed state of DRPolicy.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              consistencyGroupId:
+                format: int64
+                type: integer
+              selectedPVCs:
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              status:
+                type: string
+            required:
+            - status
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-controller-manager
+  namespace: hspc-replication-operator-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-leader-election-role
+  namespace: hspc-replication-operator-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-drpolicy-admin-role
+rules:
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies
+  verbs:
+  - '*'
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-drpolicy-editor-role
+rules:
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-drpolicy-viewer-role
+rules:
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hspc-dr-operator-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - drpolicies/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kubevirt.io
+  resources:
+  - virtualmachines
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  - volumeattachments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  - persistentvolumeclaims
+  - namespaces
+  - events
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - hspc.hitachi.com
+  resources:
+  - replications
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - volumeattachments
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hspc-dr-operator-metrics-auth-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hspc-dr-operator-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-leader-election-rolebinding
+  namespace: hspc-replication-operator-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hspc-dr-operator-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: hspc-dr-operator-controller-manager
+  namespace: hspc-replication-operator-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hspc-dr-operator-manager-role
+subjects:
+- kind: ServiceAccount
+  name: hspc-dr-operator-controller-manager
+  namespace: hspc-replication-operator-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hspc-dr-operator-metrics-auth-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hspc-dr-operator-metrics-auth-role
+subjects:
+- kind: ServiceAccount
+  name: hspc-dr-operator-controller-manager
+  namespace: hspc-replication-operator-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+    control-plane: controller-manager
+  name: hspc-dr-operator-controller-manager-metrics-service
+  namespace: hspc-replication-operator-system
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: hspc-dr-operator
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-webhook-service
+  namespace: hspc-replication-operator-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    app.kubernetes.io/name: hspc-dr-operator
+    control-plane: controller-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+    control-plane: controller-manager
+  name: hspc-dr-operator-controller-manager
+  namespace: hspc-replication-operator-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hspc-dr-operator
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: hspc-dr-operator
+        control-plane: controller-manager
+    spec:
+      containers:
+      - args:
+        - --metrics-bind-address=:8443
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.hitachivantara.com/hitachicsi-oci-oss/hv-dr-operator:v1.17.1
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: hspc-dr-operator-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-metrics-certs
+  namespace: hspc-replication-operator-system
+spec:
+  dnsNames:
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: hspc-dr-operator-selfsigned-issuer
+  secretName: metrics-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-serving-cert
+  namespace: hspc-replication-operator-system
+spec:
+  dnsNames:
+  - hspc-dr-operator-webhook-service.hspc-replication-operator-system.svc
+  - hspc-dr-operator-webhook-service.hspc-replication-operator-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: hspc-dr-operator-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: hspc-dr-operator
+  name: hspc-dr-operator-selfsigned-issuer
+  namespace: hspc-replication-operator-system
+spec:
+  selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: hspc-replication-operator-system/hspc-dr-operator-serving-cert
+  name: hspc-dr-operator-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: hspc-dr-operator-webhook-service
+      namespace: hspc-replication-operator-system
+      path: /validate-hspc-hitachi-com-v1alpha2-drpolicy
+  failurePolicy: Fail
+  name: vdrpolicy-v1alpha2.kb.io
+  rules:
+  - apiGroups:
+    - hspc.hitachi.com
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - drpolicies
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: hspc-replication-operator-system/hspc-dr-operator-serving-cert
+  name: hspc-dr-operator-volumeattachment-restore-order
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: hspc-dr-operator-webhook-service
+      namespace: hspc-replication-operator-system
+      path: /validate-volumeattachment
+  failurePolicy: Ignore
+  name: volumeattachment-restore-order.hspc.hitachi.com
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+    scope: '*'
+  sideEffects: None
