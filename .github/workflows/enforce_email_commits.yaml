@@ -1,0 +1,49 @@
+name: Block Unapproved Emails
+
+on: [push, pull_request]
+
+jobs:
+  check-committer-email:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get recent commits and validate email
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          
+          BRANCH_NAME=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+
+          echo "Checking commits on branch: $BRANCH_NAME"
+
+          git fetch origin $BRANCH_NAME
+
+          EMAILS=$(git log origin/$BRANCH_NAME -n 100 --pretty=format:'%ae')
+
+          echo "Commit emails:"
+          echo "$EMAILS"
+
+          BLOCKED=false
+
+          for email in $EMAILS; do
+            if [[ "$email" == *@hitachivantara.com ]] || [[ "$email" == *@hitachids.com ]] || [[ "$email" =~ @users\.noreply\.github\.com$ ]]; then
+              echo "Allowed: $email"
+            else
+              echo "Blocked: $email"
+              BLOCKED=true
+            fi
+          done
+
+          if [ "$BLOCKED" = true ]; then
+            echo "Unauthorized email(s) detected. Failing the push."
+            exit 1
+          else
+            echo "All commit emails are approved."
+          fi
