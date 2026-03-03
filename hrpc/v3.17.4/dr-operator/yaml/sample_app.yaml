@@ -1,0 +1,48 @@
+---
+# ------------------- Namespaces -------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+
+# ------------------- UI PVC + Pod -------------------
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-ui-pvc
+  namespace: demo-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: <storageClassName>
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-pod-ui
+  namespace: demo-app
+  labels:
+    app: sample-app
+    tier: demo-ui
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: my-busybox
+      image: busybox
+      command: ["sleep", "1000000"]
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: sample-volume
+          mountPath: "/data"
+  volumes:
+    - name: sample-volume
+      persistentVolumeClaim:
+        claimName: demo-ui-pvc
+  restartPolicy: Never
