@@ -1,0 +1,31 @@
+apiVersion: hspc.hitachi.com/v1alpha2
+kind: DRPolicy
+metadata:
+  name: sample-app-drpolicy
+spec:
+  pvcSelector:
+    # matchWorkloadLabels:
+    #   - app: sample-app
+    matchNamespaces:
+      - demo-app
+    # matchPvcs:
+    #   - demo-ui-pvc
+  drTarget:
+    clusterName: <targetClusterName>
+  replicationMode: sync
+  consistencyRequired: true
+  consistencyGroupName: spc-<customConsistencyGroupName>
+  #primaryJournalId: 12
+  #secondaryJournalId: 2
+  #desiredState: pair
+  readyOrderOfPvcByNamespace:
+    - demo-app
+  # readyOrderOfPvcByLabel:
+  #   - app: sample-app
+  # replicationAttribute: primary
+  #actionsAfterStorageFailover:
+  actionsOnTarget:
+    - scriptType: shell
+      configMapRef:
+        name: post-failover-script
+        key: run.sh
