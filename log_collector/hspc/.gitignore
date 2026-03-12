@@ -1,0 +1,49 @@
+# Log Bundles
+hspc-csi-logs-*/
+hspc-csi-logs-*.zip
+*.zip
+
+# Binaries
+kubectl
+kubectl.exe
+oc
+oc.exe
+ocbak
+
+# Kubernetes/OpenShift Config Files
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+*-kubeconfig
+*kubeconfig
+
+# Windows Zone Identifier Files
+*:Zone.Identifier
+
+# Project Documentation (private/internal)
+*.md
+!README.md
+!LICENSE.md
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Cursor IDE Files
+.cursor/
+*.cursor
+
+# Temporary Files
+*.tmp
+*.log
+errors.log
+failed-pods.txt
+
+# OS Files
+Thumbs.db
+desktop.ini
+
