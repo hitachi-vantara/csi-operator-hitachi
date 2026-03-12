@@ -1,10 +1,11 @@
 <#
 .SYNOPSIS
-    Hitachi HSPC CSI Driver Log Bundle Collector v1.6.3 - PowerShell Edition
+    Hitachi HSPC CSI Driver Log Bundle Collector v1.6.4 - PowerShell Edition
     -Kubeconfig optional · auto-detect OpenShift · full manifests
     -Collects logs from ALL containers in each pod
     -Supports dual-cluster collection with DR-Operator detection
-    -Oc optional 
+    -Oc optional
+    -Optional MTC/MTV must-gather (-Mtc / -Mtv; OpenShift + oc required)
 .PARAMETER Kubeconfig
     Primary cluster kubeconfig file (backward compatible, maps to KubeconfigPrimary)
 .PARAMETER KubeconfigPrimary
@@ -19,7 +20,22 @@
     Output directory (default: ./hspc-csi-logs-YYYYMMDD-HHMMSS)
 .PARAMETER NoCompress
     Skip zip file creation
+.PARAMETER Mtc
+    Run oc adm must-gather for Migration Toolkit for Containers.
+    Requires OpenShift and oc to be available; skipped with a warning if not detected.
+.PARAMETER Mtv
+    Run oc adm must-gather for Migration Toolkit for Virtualization.
+    Requires OpenShift and oc to be available; skipped with a warning if not detected.
+.PARAMETER Help
+    Display this help message. Can also use -h or -? to view help.
+.PARAMETER h
+    Alias for -Help. Display this help message.
 .EXAMPLE
+    # View help
+    ./get_hitachicsilogs.ps1 -Help
+    ./get_hitachicsilogs.ps1 -h
+    Get-Help ./get_hitachicsilogs.ps1
+    
     # Dual-cluster collection (note: PowerShell parameters use PascalCase, no hyphens)
     ./get_hitachicsilogs.ps1 -KubeconfigPrimary ./dc-1-kubeconfig -KubeconfigSecondary ./dc2-kubeconfig
     
@@ -33,6 +49,10 @@
 .NOTES
     PowerShell parameter names are case-insensitive but cannot contain hyphens.
     Use -KubeconfigPrimary (not -kubeconfig-primary) and -KubeconfigSecondary (not -kubeconfig-secondary).
+    To view help: -Help, -h, -?, or Get-Help ./get_hitachicsilogs.ps1
+
+.LINK
+    https://github.com/cmccuistion-hv/Hitachi-CSI-Log-Bundle
 #>
 
 param(
@@ -42,13 +62,77 @@ param(
     [switch]$Oc,
     [string]$Namespace = "",
     [string]$Dir = "",
-    [switch]$NoCompress
+    [switch]$NoCompress,
+    [switch]$Mtc,
+    [switch]$Mtv,
+    [Alias("h")]
+    [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
 
 # Script version
-$SCRIPT_VERSION = "1.6.3-ps1"
+$SCRIPT_VERSION = "1.6.4-ps1"
+
+# Cancellation handling
+$script:Cancelled = $false
+$script:ChildProcesses = @()
+
+# Function to handle cleanup on cancellation
+function Stop-Collection {
+    $script:Cancelled = $true
+    Write-Host ""
+    Log "Cancellation requested (Ctrl+C) - cleaning up..."
+    
+    # Kill all tracked child processes
+    foreach ($proc in $script:ChildProcesses) {
+        if ($proc -and -not $proc.HasExited) {
+            try {
+                $proc.Kill()
+            } catch {
+                # Process may have already exited
+            }
+        }
+    }
+    
+    # Kill any remaining kubectl/oc processes spawned by this script
+    try {
+        Get-Process | Where-Object { 
+            ($_.Path -like "*kubectl*" -or $_.Path -like "*oc*") -and 
+            $_.Parent.Id -eq $PID 
+        } | Stop-Process -Force -ErrorAction SilentlyContinue
+    } catch {
+        # Ignore errors
+    }
+    
+    Log "Script cancelled. Partial results may be in: $OutputDir"
+    exit 130
+}
+
+# Register handler for Ctrl+C cancellation (cross-platform compatible)
+# Try to register CancelKeyPress if available (Windows PowerShell), otherwise rely on try-catch
+$cancelHandler = {
+    param($eventSender, $e)
+    $e.Cancel = $true  # Prevent immediate termination, allow cleanup
+    Stop-Collection
+}
+
+# Check if CancelKeyPress event exists (Windows PowerShell) vs PowerShell Core
+# In PowerShell Core on Linux, this event doesn't exist
+$hasCancelKeyPress = [Console].GetEvents() | Where-Object { $_.Name -eq 'CancelKeyPress' }
+
+if ($hasCancelKeyPress) {
+    try {
+        [Console]::CancelKeyPress += $cancelHandler
+    } catch {
+        # If registration fails, we'll handle cancellation through try-catch blocks
+    }
+} else {
+    # CancelKeyPress not available (PowerShell Core on Linux)
+    # We'll handle cancellation through try-catch blocks in the main execution
+    # and check $script:Cancelled in loops
+    # Ctrl+C will still work, but we rely on loop checks for graceful cleanup
+}
 
 # Prefer local binaries if present, otherwise system PATH
 $Kubectl = if (Test-Path "./kubectl.exe") { "./kubectl.exe" } elseif (Test-Path "./kubectl") { "./kubectl" } elseif (Get-Command "kubectl" -ErrorAction SilentlyContinue) { "kubectl" } else { "" }
@@ -86,6 +170,26 @@ $REPLICATION_NAMESPACE = "hspc-replication-operator-system"
 function Log { param([string]$msg) Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" }
 
 function Die { param([string]$msg) Write-Error "ERROR: $msg"; exit 1 }
+
+# Display help if requested
+if ($Help) {
+    @"
+Usage: ./get_hitachicsilogs.ps1 [options]
+  -Kubeconfig <file>          Primary cluster kubeconfig (backward compatible)
+  -KubeconfigPrimary <file>   Primary cluster kubeconfig
+  -KubeconfigSecondary <file> Secondary cluster kubeconfig (for dual-cluster collection)
+  -Oc                          Force ./oc or system oc
+  -Namespace <ns>              Force namespace
+  -Dir <dir>                   Output dir
+  -NoCompress                  No zip
+  -Mtc                         Run oc adm must-gather for Migration Toolkit for Containers
+                               Requires OpenShift and oc; skipped with warning if not available
+  -Mtv                         Run oc adm must-gather for Migration Toolkit for Virtualization
+                               Requires OpenShift and oc; skipped with warning if not available
+  -Help, -h                    Show this help message
+"@
+    exit 0
+}
 
 # Set primary kubeconfig from Kubeconfig parameter if not explicitly set
 if (-not $KubeconfigPrimary -and $Kubeconfig) {
@@ -236,6 +340,60 @@ function Get-CustomResources {
     }
 }
 
+function Invoke-MustGather {
+    param(
+        [string]$KubeconfigPath,
+        [string]$ClusterOutputDir,
+        [string]$Tool,    # "mtc" or "mtv"
+        [string]$Image
+    )
+
+    # Require oc (must-gather is an oc adm command, not available in kubectl)
+    if (-not $OcCmd) {
+        Log "Skipping $Tool must-gather: oc command not available"
+        return
+    }
+
+    # Require OpenShift (re-use the route.openshift.io API group check)
+    $ErrorActionPreference = 'SilentlyContinue'
+    $routeCheck = @(Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath api-resources --api-group=route.openshift.io 2>$null | Where-Object { $_.Trim() })
+    $ErrorActionPreference = 'Stop'
+    if ($routeCheck.Count -le 1) {
+        Log "Skipping $Tool must-gather: OpenShift not detected on this cluster"
+        return
+    }
+
+    $destDir = Join-Path $ClusterOutputDir "must-gather-$Tool"
+    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+
+    Log "Running $Tool must-gather (this may take up to 30 minutes)..."
+
+    $ocArgs = @()
+    if ($KubeconfigPath) {
+        $ocArgs += "--kubeconfig=$KubeconfigPath"
+    }
+    $ocArgs += @("adm", "must-gather", "--image=$Image", "--dest-dir=$destDir")
+
+    $errorsLog = "$ClusterOutputDir/errors.log"
+    try {
+        $ErrorActionPreference = 'SilentlyContinue'
+        & $OcCmd @ocArgs 2>> $errorsLog
+        $exitCode = $LASTEXITCODE
+        $ErrorActionPreference = 'Stop'
+
+        if ($exitCode -eq 0) {
+            Log "  `u{2713} $Tool must-gather saved to: $destDir"
+        } else {
+            if ($script:Cancelled) { return }
+            Log "  `u{2717} $Tool must-gather failed (exit $exitCode) - see errors.log"
+        }
+    } catch {
+        $ErrorActionPreference = 'Stop'
+        if ($script:Cancelled) { return }
+        Log "  `u{2717} $Tool must-gather failed: $_ - see errors.log"
+    }
+}
+
 function Get-FromCluster {
     param(
         [string]$KubeconfigPath,
@@ -359,6 +517,11 @@ function Get-FromCluster {
         Log "WARNING: CRD $CRD_NAME not found on $ClusterName - will collect cluster info only"
     }
     
+    # Check for cancellation at start of collection
+    if ($script:Cancelled) {
+        return
+    }
+    
     # Collect HSPC pod logs (only if namespace was discovered)
     if ($clusterNamespace) {
         $ErrorActionPreference = 'SilentlyContinue'
@@ -375,6 +538,11 @@ function Get-FromCluster {
         
         Log "Collecting HSPC logs..."
         foreach ($pod in $pods) {
+            # Check for cancellation in loop
+            if ($script:Cancelled) {
+                return
+            }
+            
             Log "Collecting logs from pod $pod ..."
             
                     try {
@@ -394,11 +562,20 @@ function Get-FromCluster {
                 }
                 
                 foreach ($container in $containers) {
+                    # Check for cancellation in container loop
+                    if ($script:Cancelled) {
+                        return
+                    }
+                    
                     $file = "$clusterOutputDir/${pod}_${container}.log"
                     try {
                         Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath logs $pod -n $clusterNamespace -c $container --limit-bytes=200000000 > $file 2>> "$clusterOutputDir/errors.log"
                         Log "  `u{2713} Saved $pod/$container"
                     } catch {
+                        # Check if failure was due to cancellation
+                        if ($script:Cancelled) {
+                            return
+                        }
                         "$pod/$container" | Out-File -Append "$clusterOutputDir/failed-pods.txt"
                         Log "  `u{2717} FAILED $pod/$container - see errors.log"
                     }
@@ -427,6 +604,11 @@ function Get-FromCluster {
             Log "Found $($operatorPods.Count) HSPC Operator pods on ${ClusterName}: $($operatorPods -join ' ')"
             Log "Collecting HSPC Operator logs..."
             foreach ($pod in $operatorPods) {
+                # Check for cancellation in loop
+                if ($script:Cancelled) {
+                    return
+                }
+                
                 Log "Collecting logs from pod $pod ..."
                 try {
                     $ErrorActionPreference = 'SilentlyContinue'
@@ -445,11 +627,20 @@ function Get-FromCluster {
                     }
                     
                     foreach ($container in $containers) {
+                        # Check for cancellation in container loop
+                        if ($script:Cancelled) {
+                            return
+                        }
+                        
                         $file = "$clusterOutputDir/${pod}_${container}.log"
                         try {
                             Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath logs $pod -n $clusterNamespace -c $container --limit-bytes=200000000 > $file 2>> "$clusterOutputDir/errors.log"
                             Log "  `u{2713} Saved $pod/$container"
                         } catch {
+                            # Check if failure was due to cancellation
+                            if ($script:Cancelled) {
+                                return
+                            }
                             "$pod/$container" | Out-File -Append "$clusterOutputDir/failed-pods.txt"
                             Log "  `u{2717} FAILED $pod/$container - see errors.log"
                         }
@@ -503,6 +694,11 @@ function Get-FromCluster {
             if ($repPods -and $repPods.Count -gt 0) {
                 Log "Found $($repPods.Count) pods in $REPLICATION_NAMESPACE"
                 foreach ($pod in $repPods) {
+                    # Check for cancellation in loop
+                    if ($script:Cancelled) {
+                        return
+                    }
+                    
                     Log "Collecting logs from pod $pod ..."
                     try {
                         $ErrorActionPreference = 'SilentlyContinue'
@@ -521,11 +717,20 @@ function Get-FromCluster {
                         }
                         
                         foreach ($container in $containers) {
+                            # Check for cancellation in container loop
+                            if ($script:Cancelled) {
+                                return
+                            }
+                            
                             $file = "$repOutputDir/${pod}_${container}.log"
                             try {
                                 Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath logs $pod -n $REPLICATION_NAMESPACE -c $container --limit-bytes=200000000 > $file 2>> "$repOutputDir/errors.log"
                                 Log "  `u{2713} Saved $pod/$container"
                             } catch {
+                                # Check if failure was due to cancellation
+                                if ($script:Cancelled) {
+                                    return
+                                }
                                 "$pod/$container" | Out-File -Append "$repOutputDir/failed-pods.txt"
                                 Log "  `u{2717} FAILED $pod/$container - see errors.log"
                             }
@@ -612,8 +817,8 @@ function Get-FromCluster {
         } catch {
             "No HSPC CR found" | Out-File -Encoding utf8 -Append $contextFile
         }
-
-        "`n=== Telemetry CR ===" | Out-File -Encoding utf8 -Append $contextFile
+		
+		"`n=== Telemetry CR ===" | Out-File -Encoding utf8 -Append $contextFile
 
         try {
             $telemetryCRD = Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get crd telemetries.csi.hitachi.com -o name 2>$null
@@ -720,7 +925,34 @@ function Get-FromCluster {
                 }
             }
         }
-        
+
+        # Method 3: Try image tag from DaemonSet (node pods)
+        if (-not $hspcDriverVersion) {
+            $ErrorActionPreference = 'SilentlyContinue'
+            $nodeImage = Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get daemonset hspc-csi-node -n $clusterNamespace -o jsonpath='{.spec.template.spec.containers[?(@.name=="hspc-csi-driver")].image}' 2>$null
+            $ErrorActionPreference = 'Stop'
+            if ($nodeImage) {
+                $imageTagMatch = $nodeImage | Select-String -Pattern ":([0-9]+\.[0-9]+\.[0-9]+)" | Select-Object -First 1
+                if ($imageTagMatch) { $hspcDriverVersion = $imageTagMatch.Matches[0].Groups[1].Value }
+            }
+        }
+
+        # Method 4: Try version from already-collected CSI driver log files
+        if (-not $hspcDriverVersion) {
+            $logFiles = Get-ChildItem -Path $clusterOutputDir -Filter "*_hspc-csi-driver.log" -ErrorAction SilentlyContinue
+            foreach ($logFile in $logFiles) {
+                $versionLine = Get-Content $logFile.FullName -ErrorAction SilentlyContinue |
+                    Select-String "HSPC version" | Select-Object -First 1
+                if ($versionLine) {
+                    $versionMatch = $versionLine.Line | Select-String -Pattern "([0-9]+\.[0-9]+\.[0-9]+)" | Select-Object -First 1
+                    if ($versionMatch) {
+                        $hspcDriverVersion = $versionMatch.Matches[0].Groups[1].Value
+                        break
+                    }
+                }
+            }
+        }
+
         if ($hspcDriverVersion) {
             "HSPC Version: $hspcDriverVersion" | Out-File -Encoding utf8 -Append $contextFile
             Log "HSPC Version detected: $hspcDriverVersion"
@@ -812,6 +1044,26 @@ function Get-FromCluster {
         Log "WARNING: Failed to create cluster-context.txt"
     }
     
+    # Run MTC must-gather if requested
+    if ($Mtc) {
+        if ($script:Cancelled) {
+            $Kubeconfig = $savedKubeconfig
+            return
+        }
+        Invoke-MustGather -KubeconfigPath $KubeconfigPath -ClusterOutputDir $clusterOutputDir `
+            -Tool "mtc" -Image "registry.redhat.io/rhmtc/openshift-migration-must-gather-rhel8:v1.8"
+    }
+
+    # Run MTV must-gather if requested
+    if ($Mtv) {
+        if ($script:Cancelled) {
+            $Kubeconfig = $savedKubeconfig
+            return
+        }
+        Invoke-MustGather -KubeconfigPath $KubeconfigPath -ClusterOutputDir $clusterOutputDir `
+            -Tool "mtv" -Image "registry.redhat.io/migration-toolkit-virtualization/mtv-must-gather-rhel8:2.11.0"
+    }
+
     $Kubeconfig = $savedKubeconfig
     Log "Collection from $ClusterName complete"
 }
@@ -835,8 +1087,20 @@ try {
     Log "WARNING: Primary cluster collection completed with errors: $errorMsg"
 }
 
+# Check for cancellation after primary collection
+if ($script:Cancelled) {
+    Log "Collection cancelled - skipping remaining operations"
+    exit 130
+}
+
 # Collect from secondary cluster if specified
 if ($KubeconfigSecondary) {
+    # Check for cancellation before secondary collection
+    if ($script:Cancelled) {
+        Log "Collection cancelled - skipping secondary cluster"
+        exit 130
+    }
+    
     Log ""
     try {
         Get-FromCluster -KubeconfigPath $KubeconfigSecondary -ClusterName "secondary-cluster"
@@ -847,6 +1111,12 @@ if ($KubeconfigSecondary) {
             $hasAuthErrors = $true
         }
         Log "WARNING: Secondary cluster collection completed with errors: $errorMsg"
+    }
+    
+    # Check for cancellation after secondary collection
+    if ($script:Cancelled) {
+        Log "Collection cancelled - skipping compression"
+        exit 130
     }
 }
 
@@ -891,6 +1161,12 @@ if (-not $hasData) {
     Log "ERROR: No data collected from any cluster. Collection may have failed."
     Log "Collection incomplete → $OutputDir"
     exit 1
+}
+
+# Check for cancellation before compression
+if ($script:Cancelled) {
+    Log "Collection cancelled - skipping compression"
+    exit 130
 }
 
 Log "Collection complete → $OutputDir"
