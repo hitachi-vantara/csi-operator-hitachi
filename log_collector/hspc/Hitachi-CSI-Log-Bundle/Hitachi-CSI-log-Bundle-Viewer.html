@@ -1270,21 +1270,8 @@
             </div>
             <div class="header-info">
                 <span id="bundleInfo">No bundle loaded</span>
-                <a href="#" id="githubLink" style="margin-left: 15px; font-size: 11px; color: var(--accent-blue); text-decoration: none;" title="View releases on GitHub" target="_blank">📦 GitHub Releases</a>
             </div>
         </header>
-
-        <!-- Update Notification Banner -->
-        <div id="updateBanner" class="update-banner hidden">
-            <div class="update-banner-content">
-                <span class="update-icon">🔔</span>
-                <span class="update-message">
-                    A new version (<strong id="latestVersion"></strong>) is available! 
-                    <a href="#" id="updateLink" target="_blank" style="color: #fff; text-decoration: underline;">Download latest version</a>
-                </span>
-                <button class="update-dismiss" onclick="dismissUpdateBanner()">✕</button>
-            </div>
-        </div>
 
         <!-- Drop Zone -->
         <div class="drop-zone" id="dropZone">
@@ -1625,8 +1612,6 @@
             document.getElementById('currentVersion').textContent = VERSION;
             document.getElementById('githubLink').href = GITHUB_RELEASES_URL;
             
-            // Check for updates (non-blocking)
-            checkForUpdates();
         }
 
         async function checkForUpdates() {

@@ -2,8 +2,6 @@
 
 A comprehensive log collection tool for Hitachi CSI drivers running in Kubernetes or OpenShift environments. This tool automatically discovers your HSPC installation, collects logs from all our CSI's pods and containers, gathers cluster context, and packages everything into a convenient bundle for troubleshooting and support.
 
-> **Log Viewer**: [https://cmccuistion-hv.github.io/Hitachi-CSI-Log-Bundle/](https://cmccuistion-hv.github.io/Hitachi-CSI-Log-Bundle/) — Open directly in your browser, no installation required.
-
 ## Features
 
 - 🔍 **Auto-Discovery**: Automatically detects HSPC namespace and resources
@@ -40,8 +38,8 @@ A comprehensive log collection tool for Hitachi CSI drivers running in Kubernete
 1. Download the appropriate script for your platform:
    ```bash
    # Clone the repository
-   git clone https://github.com/cmccuistion-hv/Hitachi-CSI-Log-Bundle.git
-   cd Hitachi-CSI-Log-Bundle
+   git clone https://github.com/hitachi-vantara/csi-operator-hitachi.git
+   cd csi-operator-hitachi/log_collector/hspc/Hitachi-CSI-Log-Bundle
    ```
 
 2. Make the bash script executable (Linux/macOS):
@@ -239,9 +237,7 @@ The script creates a directory (and optionally a zip file) containing:
 
 ## Log Viewer
 
-The log viewer is available online at **[https://cmccuistion-hv.github.io/Hitachi-CSI-Log-Bundle/](https://cmccuistion-hv.github.io/Hitachi-CSI-Log-Bundle/)** — no installation required, just open it in your browser and load your log bundle.
-
-Alternatively, download `Hitachi-CSI-log-Bundle-Viewer.html` from this repository and open it locally in any modern browser.
+Download `Hitachi-CSI-log-Bundle-Viewer.html` from this repository and open it locally in any modern browser.
 
 **Note**: The viewer supports both ZIP files and folders. Drag and drop ZIP files directly, or use the browse buttons to select either ZIP files or folders.
 
@@ -339,8 +335,7 @@ When `--mtc` or `--mtv` (Bash) / `-Mtc` or `-Mtv` (PowerShell) are specified:
 
 ## Support
 
-For issues, questions, or contributions:
-- Open an issue on [GitHub](https://github.com/cmccuistion-hv/Hitachi-CSI-Log-Bundle/issues)
+For questions, or contributions:
 - For Hitachi CSI driver support, contact your Hitachi Vantara representative
 
 ## License
