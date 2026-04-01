@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  namespace: kube-system
+  name: hspc-iscsi-init
+  labels:
+    name: hspc-iscsi-init
+spec:
+  selector:
+    matchLabels:
+      name: hspc-iscsi-init
+  template:
+    metadata:
+      labels:
+        name: hspc-iscsi-init
+    spec:
+      hostNetwork: true
+      serviceAccount: hspc-csi-sa
+      initContainers:
+        - name: init-node
+          command:
+            - nsenter
+            - --mount=/proc/1/ns/mnt
+            - --
+            - sh
+            - -c
+          args: ["$(STARTUP_SCRIPT)"]
+          image: alpine:3.7
+          env:
+            - name: STARTUP_SCRIPT
+              value: |
+                #! /bin/bash;
+                sudo sed -i 's/^\(node.session.scan\).*/\1 = manual/' /etc/iscsi/iscsid.conf;
+                cat /etc/iscsi/initiatorname.iscsi;
+                sudo cat << EOF > /etc/multipath.conf
+                defaults {
+                    user_friendly_names yes
+                    find_multipaths yes
+                  }
+                  blacklist {
+                    device {
+                      vendor "NVME"
+                      product "Amazon Elastic Block Store"
+                    }
+                  }
+                EOF
+                sudo systemctl enable --now iscsid multipathd;
+                sudo systemctl enable --now iscsi;
+          securityContext:
+            privileged: true
+      hostPID: true
+      containers:
+        - name: wait
+          image: k8s.gcr.io/pause:3.1
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+  updateStrategy:
+    type: RollingUpdate
