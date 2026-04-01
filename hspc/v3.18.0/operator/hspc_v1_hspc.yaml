@@ -1,0 +1,6 @@
+apiVersion: csi.hitachi.com/v1
+kind: HSPC
+metadata:
+  name: hspc
+  namespace: kube-system
+spec: {}

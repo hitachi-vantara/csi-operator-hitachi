@@ -1,0 +1,37 @@
+apiVersion: node.harvesterhci.io/v1beta1
+kind: CloudInit
+metadata:
+  name: multipathd-persistent
+spec:
+  matchSelector: {}
+  contents: |
+    #cloud-config
+    write_files:
+      - path: /etc/multipath.conf
+        permissions: '0644'
+        owner: root:root
+        content: |
+          defaults {
+            user_friendly_names yes
+            find_multipaths yes
+          }
+          blacklist {
+          }
+          devices {
+            device {
+              vendor "(HITACHI|HP)"
+              product "OPEN-.*"
+              path_grouping_policy "multibus"
+              path_checker "tur"
+              features "0"
+              failback immediate
+              hardware_handler "0"
+              prio "const"
+              rr_weight uniform
+              no_path_retry 10
+            }
+          }
+    runcmd:
+      - systemctl enable --now multipathd
+      - multipath -F || true
+      - multipath -r || true
