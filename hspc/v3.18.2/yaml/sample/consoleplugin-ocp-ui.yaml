@@ -1,0 +1,273 @@
+---
+# =============================================================================
+# Hitachi OCP Console Plugin - Deployment Manifest
+# Version: 3.18.0
+#
+# Deploys the OpenShift Console Plugin frontend only.
+#
+# Apply with:
+#   oc apply -f vsp360-dcm-plugin.yaml
+#
+# After applying, verify the plugin is registered:
+#   oc get consoleplugin console-plugin-vsp360-dcm
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vsp360-dcm
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: console-plugin-vsp360-dcm
+  namespace: vsp360-dcm
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+data:
+  nginx.conf: |
+    error_log /dev/stdout info;
+    events {}
+    http {
+      access_log         /dev/stdout;
+      include            /etc/nginx/mime.types;
+      default_type       application/octet-stream;
+      keepalive_timeout  65;
+      server {
+        listen              9443 ssl;
+        listen              [::]:9443 ssl;
+        ssl_certificate     /var/cert/tls.crt;
+        ssl_certificate_key /var/cert/tls.key;
+        root                /usr/share/nginx/html;
+      }
+    }
+  plugin-config.json: |
+    {
+      "plugins": [
+        {
+          "name": "vsp360-dcm",
+          "enabled": true,
+          "version": "3.18.0",
+          "description": "OpenShift Console Plugin for Hitachi"
+        }
+      ]
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console-plugin-vsp360-dcm
+  namespace: vsp360-dcm
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+    app.openshift.io/runtime-namespace: vsp360-dcm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: console-plugin-vsp360-dcm
+      app.kubernetes.io/name: console-plugin-vsp360-dcm
+  template:
+    metadata:
+      labels:
+        app: console-plugin-vsp360-dcm
+        app.kubernetes.io/name: console-plugin-vsp360-dcm
+        app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+    spec:
+      containers:
+        - name: console-plugin-vsp360-dcm
+          image: registry.hitachivantara.com/hitachicsi-oci-oss/hv-ocp-ui:v3.18.0
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          volumeMounts:
+            - name: console-plugin-vsp360-dcm-cert
+              readOnly: true
+              mountPath: /var/cert
+            - name: nginx-conf
+              readOnly: true
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: console-plugin-vsp360-dcm-cert
+          secret:
+            secretName: console-plugin-vsp360-dcm-cert
+            defaultMode: 420
+        - name: nginx-conf
+          configMap:
+            name: console-plugin-vsp360-dcm
+            defaultMode: 420
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    # OpenShift automatically generates and rotates a trusted TLS certificate
+    # into the secret named here, bound to this service's DNS hostnames.
+    service.beta.openshift.io/serving-cert-secret-name: console-plugin-vsp360-dcm-cert
+    console.openshift.io/hostname-for-plugin: console-plugin-vsp360-dcm.vsp360-dcm.svc.cluster.local
+  name: console-plugin-vsp360-dcm
+  namespace: vsp360-dcm
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+spec:
+  ports:
+    - name: 9443-tcp
+      protocol: TCP
+      port: 9443
+      targetPort: 9443
+  selector:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+  type: ClusterIP
+  sessionAffinity: None
+
+---
+apiVersion: console.openshift.io/v1
+kind: ConsolePlugin
+metadata:
+  name: console-plugin-vsp360-dcm
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+spec:
+  displayName: Hitachi VSP360 DCM
+  i18n:
+    loadType: Preload
+  backend:
+    type: Service
+    service:
+      name: console-plugin-vsp360-dcm
+      namespace: vsp360-dcm
+      port: 9443
+      basePath: /
+
+---
+# Patcher: ServiceAccount, ClusterRole, ClusterRoleBinding, and Job
+# that enables the plugin in the OpenShift Console operator after deployment.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: console-plugin-vsp360-dcm-patcher
+  namespace: vsp360-dcm
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: console-plugin-vsp360-dcm-patcher
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+rules:
+  - apiGroups: ["operator.openshift.io"]
+    resources: ["consoles"]
+    verbs: ["get", "list", "patch", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: console-plugin-vsp360-dcm-patcher
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: console-plugin-vsp360-dcm-patcher
+subjects:
+  - kind: ServiceAccount
+    name: console-plugin-vsp360-dcm-patcher
+    namespace: vsp360-dcm
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: console-plugin-vsp360-dcm-patcher
+  namespace: vsp360-dcm
+  labels:
+    app: console-plugin-vsp360-dcm
+    app.kubernetes.io/name: console-plugin-vsp360-dcm
+    app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+spec:
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        app: console-plugin-vsp360-dcm
+        app.kubernetes.io/name: console-plugin-vsp360-dcm
+        app.kubernetes.io/part-of: console-plugin-vsp360-dcm
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: console-plugin-vsp360-dcm-patcher
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 400
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: console-plugin-vsp360-dcm-patcher
+          image: registry.redhat.io/openshift4/ose-tools-rhel8@sha256:e44074f21e0cca6464e50cb6ff934747e0bd11162ea01d522433a1a1ae116103
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          command:
+            - /bin/bash
+            - -c
+            - |
+              existingPlugins=$(oc get consoles.operator.openshift.io cluster -o json | jq -c '.spec.plugins // []')
+              mergedPlugins=$(jq --argjson existingPlugins "${existingPlugins}" --argjson consolePlugin '["console-plugin-vsp360-dcm"]' -c -n '$existingPlugins + $consolePlugin | unique')
+              patchedPlugins=$(jq --argjson mergedPlugins $mergedPlugins -n -c '{ "spec": { "plugins": $mergedPlugins } }')
+              oc patch consoles.operator.openshift.io cluster --patch $patchedPlugins --type=merge
