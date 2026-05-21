@@ -1,0 +1,5 @@
+[Version]
+HSPC:    v3.18.2
+hspcc:   3.18.2
+Git SHA: 14ab495197e5b79c254a6a2171983ac041c744af
+Golang:  1.25.0
