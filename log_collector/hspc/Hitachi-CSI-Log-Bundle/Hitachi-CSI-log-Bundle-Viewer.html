@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hitachi CSI Log Bundle Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -1006,6 +1008,175 @@
             color: var(--text-secondary);
         }
 
+        /* AI Analysis Tab */
+        .ai-analysis-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            padding: 16px;
+            gap: 8px;
+        }
+        .ai-tab-bar {
+            display: flex;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+        }
+        .ai-tab {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 10px 16px;
+            margin-bottom: -1px;
+            transition: color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+        }
+        .ai-tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+        .ai-tab.active {
+            color: var(--accent, #4a9eff);
+            border-bottom-color: var(--accent, #4a9eff);
+            font-weight: 600;
+        }
+        .ai-tab-pane {
+            display: none;
+            flex-direction: column;
+            flex: 1 1 0;
+            min-height: 0;
+            overflow: auto;
+            padding: 12px;
+        }
+        .ai-tab-pane.active {
+            display: flex;
+        }
+        .ai-analysis-form {
+            flex-shrink: 0;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+        .ai-analysis-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .ai-analysis-row {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .ai-analysis-row label {
+            min-width: 70px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .ai-analysis-row input[type="text"],
+        .ai-analysis-row input[type="password"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 6px 10px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 12px;
+        }
+        .ai-checkbox-label {
+            min-width: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        .ai-analysis-actions {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .ai-analysis-hint {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        .ai-analysis-result {
+            overflow-y: auto;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+        .ai-analysis-placeholder {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .ai-analysis-loading {
+            color: var(--accent-blue);
+        }
+        .ai-analysis-output {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .ai-analysis-output .ai-high-priority {
+            background: rgba(244, 135, 113, 0.15);
+            border-left: 4px solid var(--error-red);
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+        }
+        .ai-analysis-output .ai-issue-card {
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+        }
+        .ai-analysis-output .ai-issue-card.priority-high { border-left: 4px solid var(--error-red); }
+        .ai-analysis-output .ai-issue-card.priority-medium { border-left: 4px solid var(--warning-yellow); }
+        .ai-analysis-output .ai-issue-card.priority-low { border-left: 4px solid var(--accent-blue); }
+        .ai-analysis-output .ai-issue-title { font-weight: 600; margin-bottom: 4px; }
+        .ai-analysis-output .ai-issue-meta { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; }
+        .ai-analysis-output .ai-issue-summary { margin-bottom: 6px; }
+        .ai-analysis-output .ai-issue-actions { font-size: 12px; color: var(--accent-green); }
+        .ai-analysis-output .ai-issue-evidence { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+        .ai-analysis-output .ai-issue-evidence .ai-evidence-text { font-family: monospace; word-break: break-all; }
+        .ai-analysis-output .ai-issue-root-cause { font-size: 11px; color: var(--text-secondary); margin-top: 4px; font-style: italic; }
+        .ai-analysis-error {
+            color: var(--error-red);
+            font-size: 13px;
+        }
+        .ai-chat-section { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; }
+        .ai-chat-hint { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; flex-shrink: 0; }
+        .ai-chat-messages { flex: 1; min-height: 120px; overflow-y: auto; margin-bottom: 10px; padding: 8px; background: var(--bg-primary); border-radius: 4px; border: 1px solid var(--border-color); }
+        .ai-chat-msg { margin-bottom: 10px; max-width: 95%; }
+        .ai-chat-msg.user { margin-left: 0; text-align: left; }
+        .ai-chat-msg.assistant { margin-left: 0; text-align: left; }
+        .ai-chat-msg-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 2px; }
+        .ai-chat-msg-content { font-size: 12px; padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+        .ai-chat-msg-content p { margin: 0 0 0.5em 0; }
+        .ai-chat-msg-content p:last-child { margin-bottom: 0; }
+        .ai-chat-msg-content strong { font-weight: 600; }
+        .ai-chat-msg-content code { font-family: ui-monospace, monospace; font-size: 11px; padding: 2px 4px; border-radius: 4px; background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+        .ai-chat-msg-content pre { margin: 0.5em 0; padding: 8px; border-radius: 4px; background: var(--bg-tertiary); border: 1px solid var(--border-color); overflow-x: auto; white-space: pre; }
+        .ai-chat-msg-content pre code { padding: 0; background: none; border: none; }
+        .ai-chat-msg-content ul, .ai-chat-msg-content ol { margin: 0.5em 0; padding-left: 1.25em; }
+        .ai-chat-msg-content li { margin-bottom: 0.25em; }
+        .ai-chat-msg.user .ai-chat-msg-content { background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+        .ai-chat-msg.assistant .ai-chat-msg-content { background: var(--bg-secondary); border: 1px solid var(--border-color); white-space: normal; }
+        .ai-chat-input-row { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+        .ai-chat-input-row input { flex: 1; padding: 8px 10px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; }
+        .hidden { display: none !important; }
+
         .empty-state-icon {
             font-size: 48px;
             margin-bottom: 15px;
@@ -1036,6 +1207,118 @@
             font-size: 14px;
             color: var(--text-secondary);
             font-weight: normal;
+            white-space: nowrap;
+        }
+
+        .config-section-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            min-width: 0;
+        }
+
+        .config-section-header-with-search {
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .config-section-title-group {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex: 1;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+
+        .config-section-toolbar-left {
+            flex: 0 1 auto;
+        }
+
+        .config-search-box {
+            flex: 1;
+            min-width: 220px;
+            max-width: 480px;
+            position: relative;
+        }
+
+        .config-search-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--accent-blue);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .config-search-box .config-search-icon {
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--accent-blue);
+            font-size: 14px;
+            line-height: 1;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.9;
+        }
+
+        .config-search-box input {
+            width: 100%;
+            padding: 10px 36px 10px 34px;
+            background: var(--bg-primary);
+            border: 2px solid var(--accent-blue);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .config-search-box input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.9;
+        }
+
+        .config-search-box input:focus {
+            outline: none;
+            border-color: var(--accent-green);
+            box-shadow: 0 0 0 3px rgba(78, 201, 176, 0.2), 0 2px 10px rgba(0, 0, 0, 0.4);
+        }
+
+        .config-search-box .search-clear {
+            right: 8px;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            font-size: 13px;
+        }
+
+        .config-search-box .search-clear:hover {
+            background: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        tr.volume-table-row.volume-row-match td:first-child {
+            box-shadow: inset 3px 0 0 var(--accent-blue);
+        }
+
+        tr.volume-table-row.volume-row-hidden {
+            display: none;
+        }
+
+        .volume-search-empty {
+            padding: 24px 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 13px;
         }
 
         .config-table {
@@ -1082,8 +1365,22 @@
             padding: 2px 8px;
             border-radius: 3px;
             margin: 2px;
-            font-size: 11px;
+            font-size: 12px;
             font-family: 'Consolas', monospace;
+            color: var(--text-primary);
+        }
+
+        .lun-badge-id {
+            color: var(--text-secondary);
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-right: 3px;
+        }
+
+        .lun-badge-value {
+            font-weight: 600;
+            color: var(--accent-blue);
         }
 
         .port-badge {
@@ -1270,8 +1567,21 @@
             </div>
             <div class="header-info">
                 <span id="bundleInfo">No bundle loaded</span>
+                <a href="#" id="githubLink" style="margin-left: 15px; font-size: 11px; color: var(--accent-blue); text-decoration: none;" title="View releases on GitHub" target="_blank">📦 GitHub Releases</a>
             </div>
         </header>
+
+        <!-- Update Notification Banner -->
+        <div id="updateBanner" class="update-banner hidden">
+            <div class="update-banner-content">
+                <span class="update-icon">🔔</span>
+                <span class="update-message">
+                    A new version (<strong id="latestVersion"></strong>) is available! 
+                    <a href="#" id="updateLink" target="_blank" style="color: #fff; text-decoration: underline;">Download latest version</a>
+                </span>
+                <button class="update-dismiss" onclick="dismissUpdateBanner()">✕</button>
+            </div>
+        </div>
 
         <!-- Drop Zone -->
         <div class="drop-zone" id="dropZone">
@@ -1394,6 +1704,7 @@
                     <div class="tab" data-tab="config">📋 Configuration</div>
                     <div class="tab" data-tab="cluster">🔧 Cluster Info</div>
                     <div class="tab" data-tab="drpolicies" id="drpoliciesTab" style="display: none;">🔄 DR Policies</div>
+                    <div class="tab" data-tab="ai">🤖 AI Analysis</div>
                 </div>
 
                 <!-- Logs Tab -->
@@ -1477,6 +1788,60 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- AI Analysis Tab -->
+                <div class="tab-content" data-content="ai">
+                    <div class="ai-analysis-panel">
+                        <div class="ai-tab-bar">
+                            <button type="button" class="ai-tab" data-tab="setup">Setup</button>
+                            <button type="button" class="ai-tab" data-tab="results">Analysis</button>
+                            <button type="button" class="ai-tab" data-tab="chat">Chat</button>
+                        </div>
+                        <div class="ai-tab-pane" data-tab-pane="setup" id="aiTabSetup">
+                            <div class="ai-analysis-form">
+                                <p class="ai-analysis-desc">Analyze the loaded log bundle with an LLM to get a prioritized list of issues and recommended next steps. Your API key is sent only to the selected provider.</p>
+                                <div class="ai-analysis-row">
+                                    <label for="aiApiKey">API Key</label>
+                                    <input type="password" id="aiApiKey" placeholder="sk-... or your provider API key" autocomplete="off">
+                                    <label class="ai-checkbox-label"><input type="checkbox" id="aiRememberKey" checked> Remember key</label>
+                                </div>
+                                <div class="ai-analysis-row">
+                                    <label for="aiApiUrl">API URL</label>
+                                    <input type="text" id="aiApiUrl" placeholder="https://api.openai.com/v1 (OpenAI-compatible)" value="https://api.openai.com/v1">
+                                </div>
+                                <div class="ai-analysis-row">
+                                    <label for="aiModel">Model</label>
+                                    <input type="text" id="aiModel" placeholder="e.g. gpt-4o-mini" value="gpt-4o-mini">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ai-tab-pane" data-tab-pane="results" id="aiTabResults">
+                            <div class="ai-analysis-actions" style="margin-bottom: 12px;">
+                                <button type="button" class="btn" id="aiAnalyzeBtn" disabled>Analyze with AI</button>
+                                <span class="ai-analysis-hint" id="aiAnalyzeHint">Load a log bundle first.</span>
+                            </div>
+                            <div class="ai-analysis-result" id="aiAnalysisResult">
+                                <div class="ai-analysis-placeholder" id="aiAnalysisPlaceholder">Run analysis to see results here.</div>
+                                <div class="ai-analysis-loading hidden" id="aiAnalysisLoading">Analyzing…</div>
+                                <div class="ai-analysis-output hidden" id="aiAnalysisOutput"></div>
+                                <div class="ai-analysis-error hidden" id="aiAnalysisError"></div>
+                            </div>
+                        </div>
+                        <div class="ai-tab-pane" data-tab-pane="chat" id="aiTabChat">
+                            <div class="ai-chat-section">
+                                <p class="ai-chat-hint">Ask about your logs (e.g. a pod name, error code, or keyword). Relevant excerpts with context will be sent to the model.</p>
+                                <div class="ai-chat-messages" id="aiChatMessages"></div>
+                                <div class="ai-chat-input-row">
+                                    <input type="text" id="aiChatInput" placeholder="Ask a question about the logs..." autocomplete="off">
+                                    <button type="button" class="btn" id="aiChatSendBtn" disabled>Send</button>
+                                    <button type="button" class="btn" id="aiChatCopyBtn">Copy</button>
+                                    <button type="button" class="btn" id="aiChatSaveBtn">Save</button>
+                                    <button type="button" class="btn" id="aiChatClearBtn">Clear chat</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1497,7 +1862,7 @@
     <script>
 
         // Version Configuration
-        const VERSION = '1.6.4';
+        const VERSION = '1.7.1';
         const GITHUB_REPO = 'cmccuistion-hv/Hitachi-CSI-Log-Bundle';
         const GITHUB_RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`;
         const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
@@ -1507,11 +1872,13 @@
             logs: {},
             allLogs: [],  // Pre-concatenated logs for "all pods" view (performance optimization)
             clusterContext: {},
+            multipath: {},  // Per-cluster, per-node multipath data: { cluster: { nodeName: content } }
             clusters: [],
             currentCluster: null,  // null = all clusters, or specific cluster name
             currentPod: 'all',
             filterLevel: 'ALL',
             searchTerm: '',
+            volumeSearchTerm: '',
             categoryFilter: null,  // Filter by error category
             wordWrap: true,  // Toggle word wrap mode
             disabledContainers: new Set(),  // Containers disabled when viewing "all" (empty Set = all enabled)
@@ -1556,12 +1923,14 @@
             // Configuration data
             config: {
                 hosts: {},           // WWN -> host info
+                podNodeIds: {},      // pod log name -> Kubernetes node_id from NodeGetInfo
                 hostgroups: {},      // hostgroup -> members
                 ports: {},           // port -> config
                 volumes: {},         // volume -> attachments
                 arrays: {},          // array serial -> array info
                 events: [],          // timeline of config changes
                 storageClasses: [],  // Array of parsed storage class objects
+                volumeSnapshotClasses: [],  // Array of parsed VolumeSnapshotClass objects
                 customResources: {}  // cluster-name -> { localVolumes: [], remoteVolumes: [], replications: [], drPolicies: [] }
             },
             // Lazy parsing flags (performance optimization)
@@ -1591,7 +1960,8 @@
                 'other': { count: 0, pods: [], description: 'Other errors' }
             },
             volumeOperations: [],    // { timestamp, operation, volumeId, pod, status, message }
-            connectivity: {}         // node-name -> { arrays: [], paths: {total, active, failed}, volumes: [] }
+            connectivity: {},        // node-name -> { arrays: [], paths: {total, active, failed}, volumes: [] }
+            aiChatHistory: []        // { role: 'user'|'assistant', content: string } for follow-up chat
         };
 
         // DOM Elements
@@ -1612,6 +1982,8 @@
             document.getElementById('currentVersion').textContent = VERSION;
             document.getElementById('githubLink').href = GITHUB_RELEASES_URL;
             
+            // Check for updates (non-blocking)
+            checkForUpdates();
         }
 
         async function checkForUpdates() {
@@ -1691,6 +2063,7 @@
             setupVirtualScroll();
             initializeVersion();
             setupYamlModal();
+            setupAIAnalysis();
         }
 
         // Drop Zone Setup
@@ -1890,11 +2263,12 @@
                         if (zipEntry.dir) continue;
                         if (filename.includes('errors.log')) continue;
                         
-                        // Check if it's a log file or cluster-context
+                        // Check if it's a log file, cluster-context, or multipath data
                         const isLogFile = filename.endsWith('.log');
                         const isClusterContext = filename.includes('cluster-context');
+                        const isMultipath = filename.includes('/multipath/') && filename.endsWith('.txt');
                         
-                        if (isLogFile || isClusterContext) {
+                        if (isLogFile || isClusterContext || isMultipath) {
                             try {
                                 const content = await zipEntry.async('string');
                                 
@@ -1908,7 +2282,7 @@
                                     cluster = 'secondary-cluster';
                                 }
                                 
-                                files.push({ name, content, cluster, path: filename });
+                                files.push({ name, content, cluster, path: filename, isMultipath });
                             } catch (e) {
                                 console.error('Error reading file content for', filename, ':', e);
                             }
@@ -1946,20 +2320,22 @@
             
             for (const file of files) {
                 console.log('Checking file:', file.name, 'webkitRelativePath:', file.webkitRelativePath);
-                if ((file.name.endsWith('.log') && file.name !== 'errors.log') || file.name.includes('cluster-context')) {
+                const relativePath = file.webkitRelativePath || file.name;
+                const isMultipath = relativePath.includes('/multipath/') && file.name.endsWith('.txt');
+                if ((file.name.endsWith('.log') && file.name !== 'errors.log') || file.name.includes('cluster-context') || isMultipath) {
                     const content = await file.text();
                     
                     // Extract cluster name from path
                     let cluster = null;
-                    if (file.webkitRelativePath) {
-                        if (file.webkitRelativePath.includes('primary-cluster/')) {
+                    if (relativePath) {
+                        if (relativePath.includes('primary-cluster/')) {
                             cluster = 'primary-cluster';
-                        } else if (file.webkitRelativePath.includes('secondary-cluster/')) {
+                        } else if (relativePath.includes('secondary-cluster/')) {
                             cluster = 'secondary-cluster';
                         }
                     }
                     
-                    fileContents.push({ name: file.name, content, cluster, path: file.webkitRelativePath || file.name });
+                    fileContents.push({ name: file.name, content, cluster, path: relativePath, isMultipath });
                 }
             }
             
@@ -2017,8 +2393,10 @@
                 
                 state.logs = {};
                 state.clusterContext = {};
+                state.multipath = {};
                 state.clusters = [];
             state.inferredYear = null;  // Reset year inference for new bundle
+            state.volumeSearchTerm = '';
             state.disabledContainers = new Set();  // Reset disabled containers for new bundle
             state.timeFilter = {
                 enabled: false,
@@ -2044,12 +2422,14 @@
             state.podStats = {};
             state.config = {
                 hosts: {},
+                podNodeIds: {},
                 hostgroups: {},
                 ports: {},
                 volumes: {},
                 arrays: {},
                 events: [],
                 storageClasses: [],
+                volumeSnapshotClasses: [],
                 customResources: {}
             };
             // Reset health tracking data
@@ -2117,6 +2497,18 @@
                     }
                 }
                 
+                // Process multipath files
+                if (files && Array.isArray(files)) {
+                    for (const file of files) {
+                        if (file && file.isMultipath && file.content) {
+                            const cluster = file.cluster || 'default';
+                            const nodeName = file.name.replace(/\.txt$/, '');
+                            if (!state.multipath[cluster]) state.multipath[cluster] = {};
+                            state.multipath[cluster][nodeName] = file.content;
+                        }
+                    }
+                }
+
                 // Process log files
                 if (files && Array.isArray(files)) {
                     for (const file of files) {
@@ -2806,6 +3198,521 @@
             return 'other';
         }
 
+        // Rough token estimate: GPT/Claude tokenize at ~4 chars per token on average
+        function estimateTokens(text) {
+            return Math.ceil((text || '').length / 4);
+        }
+
+        // Format a token count as a human-readable string (e.g. "~6.2k tokens")
+        function formatTokenEstimate(n) {
+            if (n >= 1000) return '~' + (n / 1000).toFixed(1) + 'k tokens';
+            return '~' + n + ' tokens';
+        }
+
+        // Build a bounded JSON payload for AI log analysis (no full logs; summary + sampled errors only)
+        function buildAnalysisPayload(maxSampleLines) {
+            maxSampleLines = maxSampleLines != null ? maxSampleLines : 200;
+            const payload = {
+                bundle: {
+                    name: state.bundleName || '',
+                    timestamp: state.bundleTimestamp || '',
+                    clusters: state.clusters && state.clusters.length ? state.clusters : ['default']
+                },
+                environment: {},
+                keyIdentifiers: { hspcCodes: [], volumeIdsInErrors: [], arraySerialsInErrors: [] },
+                stats: state.stats ? { ...state.stats } : {},
+                errorCategories: [],
+                sampleErrorLines: [],
+                configSummary: {},
+                podHealthSummary: {},
+                nodeHealthSummary: {}
+            };
+
+            // Environment summary (platform, versions, node count, DR/replication)
+            if (state.stats) {
+                payload.environment = {
+                    platform: state.stats.platform || '-',
+                    platformVersion: state.stats.platformVersion || '-',
+                    hspcVersion: state.stats.hspcVersion || '-',
+                    hspcOperatorVersion: state.stats.hspcOperatorVersion || '-',
+                    nodeCount: state.stats.nodeCount || 0,
+                    clusterCount: (state.clusters && state.clusters.length) ? state.clusters.length : 1
+                };
+                const hasSecondary = state.clusters && state.clusters.some(function(c) { return c === 'secondary-cluster' || (c && c.indexOf('secondary') !== -1); });
+                const hasReplicationPod = state.logs && Object.keys(state.logs).some(function(pod) { return pod.indexOf('replication-operator') !== -1 || pod.indexOf('replication') !== -1; });
+                payload.environment.hasReplication = !!(hasSecondary || hasReplicationPod);
+            }
+
+            // Error categories with count > 0 (name, count, description, affected pods)
+            if (state.errorCategories && typeof state.errorCategories === 'object') {
+                for (const [name, cat] of Object.entries(state.errorCategories)) {
+                    if (cat && cat.count > 0) {
+                        payload.errorCategories.push({
+                            name,
+                            count: cat.count,
+                            description: cat.description || '',
+                            pods: (cat.pods || []).slice(0, 25)
+                        });
+                    }
+                }
+            }
+
+            // Helpers for key identifiers and line scoring
+            const hspcCodeRegex = /HSPC0x[0-9a-fA-F]+/g;
+            const volumeIdInBracketRegex = /Volume ID \[([^\]]+)\]/g;
+            function scoreLine(line) {
+                var s = 0;
+                if (line.indexOf('HSPC0x') !== -1) s += 1;
+                if (line.indexOf('Volume ID') !== -1 || line.indexOf('LdevID') !== -1 || line.indexOf('LdevId') !== -1 || line.indexOf('copy group') !== -1 || line.indexOf('copygroup') !== -1 || line.indexOf(' pair ') !== -1 || (line.indexOf('serial') !== -1 && line.indexOf('number') !== -1)) s += 1;
+                if (line.indexOf('messageId') !== -1 || line.indexOf('jobId') !== -1 || line.indexOf('"state":"Failed"') !== -1) s += 1;
+                return s;
+            }
+
+            // Collect key identifiers and candidate ERROR lines per category (for smarter sampling)
+            const hspcCodesSet = {};
+            const volumeIdsSet = {};
+            const candidatesByCategory = {};
+            if (state.logs) {
+                for (const [podName, lines] of Object.entries(state.logs)) {
+                    if (!Array.isArray(lines)) continue;
+                    for (var idx = 0; idx < lines.length; idx++) {
+                        var entry = lines[idx];
+                        if (entry.level !== 'ERROR') continue;
+                        var raw = entry.raw || entry.message || '';
+                        var cat = entry.category || 'other';
+                        if (!candidatesByCategory[cat]) candidatesByCategory[cat] = [];
+                        if (candidatesByCategory[cat].length < 30) {
+                            candidatesByCategory[cat].push({ category: cat, pod: podName, line: raw, score: scoreLine(raw), index: idx });
+                        }
+                        var m;
+                        hspcCodeRegex.lastIndex = 0;
+                        while ((m = hspcCodeRegex.exec(raw)) !== null) { hspcCodesSet[m[0]] = true; }
+                        volumeIdInBracketRegex.lastIndex = 0;
+                        while ((m = volumeIdInBracketRegex.exec(raw)) !== null) {
+                            var vid = m[1].trim();
+                            if (vid && vid !== 'Volume ID not available') volumeIdsSet[vid] = true;
+                        }
+                    }
+                }
+            }
+            payload.keyIdentifiers.hspcCodes = Object.keys(hspcCodesSet).slice(0, 60);
+            payload.keyIdentifiers.volumeIdsInErrors = Object.keys(volumeIdsSet).slice(0, 40);
+            if (state.config && state.config.volumes) {
+                var volsWithErrors = Object.keys(state.config.volumes).filter(function(v) { return state.config.volumes[v].errors > 0; });
+                volsWithErrors.slice(0, 40).forEach(function(v) { volumeIdsSet[v] = true; });
+                payload.keyIdentifiers.volumeIdsInErrors = Object.keys(volumeIdsSet).slice(0, 40);
+            }
+            if (state.config && state.config.arrays) {
+                var arraysWithErrors = Object.keys(state.config.arrays).filter(function(a) { return state.config.arrays[a].errors > 0; });
+                payload.keyIdentifiers.arraySerialsInErrors = arraysWithErrors.slice(0, 20);
+                if (payload.keyIdentifiers.arraySerialsInErrors.length === 0) {
+                    payload.keyIdentifiers.arraySerialsInErrors = Object.keys(state.config.arrays).slice(0, 20);
+                }
+            }
+
+            // Smarter sampling: per category, sort candidates by score desc then take top lines until cap
+            var totalSamples = 0;
+            if (state.errorCategories && Object.keys(candidatesByCategory).length > 0) {
+                for (var catName in state.errorCategories) {
+                    if (!state.errorCategories[catName] || state.errorCategories[catName].count === 0 || totalSamples >= maxSampleLines) continue;
+                    var candidates = candidatesByCategory[catName] || [];
+                    if (candidates.length === 0) candidates = candidatesByCategory['other'] || [];
+                    candidates.sort(function(a, b) { return (b.score - a.score) || (a.index - b.index); });
+                    var perCategoryLimit = Math.min(20, maxSampleLines - totalSamples);
+                    for (var i = 0; i < candidates.length && i < perCategoryLimit && totalSamples < maxSampleLines; i++) {
+                        payload.sampleErrorLines.push({ category: catName, pod: candidates[i].pod, line: candidates[i].line });
+                        totalSamples++;
+                    }
+                }
+            }
+            if (payload.sampleErrorLines.length === 0 && state.logs) {
+                var fallbackCandidates = [];
+                for (var podName in state.logs) {
+                    var lines = state.logs[podName];
+                    if (!Array.isArray(lines)) continue;
+                    for (var j = 0; j < lines.length && fallbackCandidates.length < 100; j++) {
+                        if (lines[j].level === 'ERROR') fallbackCandidates.push({ category: 'other', pod: podName, line: lines[j].raw || lines[j].message, score: scoreLine(lines[j].raw || lines[j].message), index: j });
+                    }
+                }
+                fallbackCandidates.sort(function(a, b) { return (b.score - a.score) || (a.index - b.index); });
+                for (var k = 0; k < fallbackCandidates.length && totalSamples < maxSampleLines; k++) {
+                    payload.sampleErrorLines.push({ category: fallbackCandidates[k].category, pod: fallbackCandidates[k].pod, line: fallbackCandidates[k].line });
+                    totalSamples++;
+                }
+            }
+
+            // Config summary (counts and names only)
+            if (state.config) {
+                const c = state.config;
+                payload.configSummary = {
+                    hostCount: Object.keys(c.hosts || {}).length,
+                    volumeCount: Object.keys(c.volumes || {}).length,
+                    arrayCount: Object.keys(c.arrays || {}).length,
+                    portCount: Object.keys(c.ports || {}).length,
+                    eventCount: (c.events || []).length,
+                    storageClassNames: (c.storageClasses || []).map(function(sc) { return sc.name; }).filter(Boolean),
+                    volumeSnapshotClassNames: (c.volumeSnapshotClasses || []).map(function(vsc) { return vsc.name; }).filter(Boolean)
+                };
+                const hostsWithErrors = c.hosts ? Object.entries(c.hosts).filter(function(e) { return e[1].errors > 0; }).map(function(e) { return e[0]; }).slice(0, 20) : [];
+                const volumesWithErrors = c.volumes ? Object.entries(c.volumes).filter(function(e) { return e[1].errors > 0; }).map(function(e) { return e[0]; }).slice(0, 20) : [];
+                if (hostsWithErrors.length) payload.configSummary.hostsWithErrors = hostsWithErrors;
+                if (volumesWithErrors.length) payload.configSummary.volumesWithErrors = volumesWithErrors;
+            }
+
+            // Cluster context excerpt (first ~250 lines or 25k chars per cluster)
+            if (state.clusterContext && typeof state.clusterContext === 'object') {
+                payload.clusterContextExcerpt = {};
+                const maxChars = 25000;
+                for (const [cluster, content] of Object.entries(state.clusterContext)) {
+                    if (!content || typeof content !== 'string') continue;
+                    const lines = content.split('\n').slice(0, 250);
+                    let excerpt = lines.join('\n');
+                    if (excerpt.length > maxChars) excerpt = excerpt.substring(0, maxChars) + '\n... (truncated)';
+                    payload.clusterContextExcerpt[cluster] = excerpt;
+                }
+            }
+
+            // Multipath config excerpts (per-node /etc/multipath.conf and multipath -ll; collected by default, use --no-multipath to skip)
+            if (state.multipath && typeof state.multipath === 'object') {
+                payload.multipathExcerpt = {};
+                const maxCharsPerNode = 12000;
+                const maxNodesPerCluster = 15;
+                for (const [cluster, nodes] of Object.entries(state.multipath)) {
+                    if (!nodes || typeof nodes !== 'object') continue;
+                    payload.multipathExcerpt[cluster] = {};
+                    const nodeNames = Object.keys(nodes).slice(0, maxNodesPerCluster);
+                    for (const nodeName of nodeNames) {
+                        const content = nodes[nodeName];
+                        if (!content || typeof content !== 'string') continue;
+                        let excerpt = content.length > maxCharsPerNode ? content.substring(0, maxCharsPerNode) + '\n... (truncated)' : content;
+                        payload.multipathExcerpt[cluster][nodeName] = excerpt;
+                    }
+                }
+            }
+
+            // Pod health summary (pods with errors/warnings)
+            if (state.podHealth && typeof state.podHealth === 'object') {
+                const podsWithErrors = [];
+                const podsWithWarnings = [];
+                for (const [pod, h] of Object.entries(state.podHealth)) {
+                    if (h.errors > 0) podsWithErrors.push({ pod, errors: h.errors, warnings: h.warnings || 0 });
+                    else if (h.warnings > 0) podsWithWarnings.push({ pod, warnings: h.warnings, errors: 0 });
+                }
+                payload.podHealthSummary = { podsWithErrors: podsWithErrors.slice(0, 50), podsWithWarnings: podsWithWarnings.slice(0, 30) };
+            }
+            if (state.nodeHealth && typeof state.nodeHealth === 'object') {
+                const nodesWithErrors = [];
+                for (const [node, h] of Object.entries(state.nodeHealth)) {
+                    if (h.errors > 0 || h.warnings > 0) nodesWithErrors.push({ node, errors: h.errors || 0, warnings: h.warnings || 0 });
+                }
+                payload.nodeHealthSummary = { nodesWithErrors: nodesWithErrors.slice(0, 30) };
+            }
+
+            return payload;
+        }
+
+        // Build system and user prompts for AI log analysis (OpenAI-compatible chat)
+        function getAnalysisPrompts(payload) {
+            var codeRefLines = [];
+            if (payload.errorCategories && payload.errorCategories.length) {
+                payload.errorCategories.forEach(function(c) { codeRefLines.push(c.name + ': ' + (c.description || '')); });
+            }
+            var codeRefStr = codeRefLines.length ? '\n\nError code reference (use when citing causes):\n' + codeRefLines.join('\n') : '';
+
+            var systemPrompt = 'You are analyzing a Hitachi CSI (HSPC) log bundle from a Kubernetes or OpenShift environment. You will receive a structured summary of errors, warnings, and configuration. Your job is to: (1) list the main issues found, (2) assign each a priority (high, medium, or low), (3) recommend the single most important thing to investigate first. Use the error category names and descriptions provided; they map to known HSPC/VSP error patterns.'
+                + ' You MUST cite specific error codes (e.g. HSPC0x...) and identifiers from the payload (keyIdentifiers, environment) in your summaries and suggestedActions when possible (e.g. "Check LDEV 13 on array 12345", "HSPC0x0000c037 indicates ..."). Give at least one concrete next step per issue where possible (e.g. a command to run or a specific resource to check). If one issue is clearly the root cause of others, say so and set rootCauseOf to that downstream category name; prioritize root causes higher.'
+                + ' Use the keyIdentifiers and environment sections when suggesting actions so answers are specific to this bundle.'
+                + ' If the payload includes multipathExcerpt (per-node /etc/multipath.conf and multipath -ll output from the bundle), use it when analyzing multipath-issues: e.g. missing or empty config, device visibility, or multipath -ll output that explains path or LUN problems.'
+                + codeRefStr
+                + '\n\nRespond in valid JSON with this shape: { "highPriorityIssue": "one sentence on what to check first", "issues": [ { "title": "short title", "priority": "high"|"medium"|"low", "category": "category key from the payload", "affectedPods": ["pod1", "pod2"], "summary": "brief explanation", "suggestedActions": "what to do", "evidence": "optional: one representative log snippet or error code from the payload that supports this issue", "rootCauseOf": "optional: category name of a downstream issue if this is the root cause" } ] }. evidence and rootCauseOf are optional. If there are no errors, set highPriorityIssue to "No errors detected in the summary." and issues to [].';
+
+            var userPrompt = 'Based on this log bundle summary, list the main issues and recommend the highest-priority item to investigate first. Cite error codes and identifiers from the payload when possible.\n\n' + JSON.stringify(payload, null, 2);
+            return { systemPrompt: systemPrompt, userPrompt: userPrompt };
+        }
+
+        // Default max completion tokens for analysis and chat. GPT-4o / GPT-4o-mini support 16k output;
+        // many other modern OpenAI-compatible models accept similar or higher (provider may cap to model max).
+        var DEFAULT_LLM_MAX_OUTPUT_TOKENS = 16384;
+
+        // Call LLM API (OpenAI-compatible: /v1/chat/completions). Returns { ok, result, error }.
+        async function callAnalysisAPI(apiKey, payload, options) {
+            options = options || {};
+            const baseUrl = (options.apiUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+            const model = options.model || 'gpt-4o-mini';
+            const prompts = getAnalysisPrompts(payload);
+            const body = {
+                model: model,
+                messages: [
+                    { role: 'system', content: prompts.systemPrompt },
+                    { role: 'user', content: prompts.userPrompt }
+                ],
+                max_tokens: options.max_tokens != null ? options.max_tokens : DEFAULT_LLM_MAX_OUTPUT_TOKENS,
+                temperature: 0.3
+            };
+            try {
+                const response = await fetch(baseUrl + '/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + apiKey
+                    },
+                    body: JSON.stringify(body)
+                });
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = {};
+                }
+                if (!response.ok) {
+                    let errMsg = data.error && data.error.message ? data.error.message : (data.error || response.statusText || 'Request failed');
+                    if (response.status === 429) {
+                        errMsg = 'Rate limit exceeded (429). The free tier allows limited requests per minute. Wait a minute and try again, or try a lighter model (e.g. gemini-2.0-flash or gemini-2.5-flash-lite).';
+                    } else if (response.status === 503) {
+                        errMsg = 'Service unavailable (503). The provider may be overloaded or the request may be too large. Wait a minute and try again. If it persists, try a smaller log bundle or a different model (e.g. gemini-2.0-flash).';
+                    } else if (response.status >= 500) {
+                        errMsg = 'Server error (' + response.status + '). Try again in a few moments.';
+                    }
+                    return { ok: false, error: String(errMsg) };
+                }
+                const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+                if (content == null) return { ok: false, error: 'No content in API response' };
+                let result = content.trim();
+                // Strip optional markdown code fence
+                const codeFence = result.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+                if (codeFence) result = codeFence[1].trim();
+                // Extract outermost JSON object (balanced braces so values containing } are handled)
+                const firstBrace = result.indexOf('{');
+                if (firstBrace !== -1) {
+                    let depth = 0;
+                    let inString = false;
+                    let escape = false;
+                    let i = firstBrace;
+                    for (; i < result.length; i++) {
+                        const c = result[i];
+                        if (escape) { escape = false; continue; }
+                        if (c === '\\' && inString) { escape = true; continue; }
+                        if (!inString && c === '"') { inString = true; continue; }
+                        if (inString && c === '"') { inString = false; continue; }
+                        if (inString) continue;
+                        if (c === '{') depth++;
+                        else if (c === '}') { depth--; if (depth === 0) break; }
+                    }
+                    if (depth === 0) {
+                        try {
+                            result = JSON.parse(result.substring(firstBrace, i + 1));
+                        } catch (e) { /* leave as string, show raw */ }
+                    }
+                }
+                return { ok: true, result: result };
+            } catch (err) {
+                return { ok: false, error: err.message || String(err) };
+            }
+        }
+
+        // Normalize log line for dedupe: strip timestamp and [pid][tid][LEVEL] prefix so same message groups together
+        var logLinePrefixRegex = /^\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+\[[^\]]+\]\[[^\]]+\]\[(?:ERROR|WARNING|INFO)\]\s*/;
+        function normalizedLogKey(raw) {
+            if (typeof raw !== 'string') return raw;
+            var m = raw.match(logLinePrefixRegex);
+            return m ? raw.substring(m[0].length) : raw.trim();
+        }
+
+        // Retrieve relevant log excerpts for chat: match query, dedupe by normalized line (with count), add context before/after each anchor
+        function getRelevantLogExcerpts(query, options) {
+            options = options || {};
+            var maxAnchorLines = options.maxAnchorLines != null ? options.maxAnchorLines : 60;
+            var contextBefore = options.contextBefore != null ? options.contextBefore : 12;
+            var contextAfter = options.contextAfter != null ? options.contextAfter : 8;
+            var maxTotalLines = options.maxTotalLines != null ? options.maxTotalLines : 600;
+            var tokens = (query || '').trim().split(/\s+/).filter(function(t) { return t.length > 0; });
+            if (tokens.length === 0) return 'No search terms. Enter a pod name, error code (e.g. HSPC0x00001002), or keyword.';
+
+            var candidates = [];
+            if (!state.logs || typeof state.logs !== 'object') return 'No logs loaded.';
+            for (var podName in state.logs) {
+                var lines = state.logs[podName];
+                if (!Array.isArray(lines)) continue;
+                for (var idx = 0; idx < lines.length; idx++) {
+                    var entry = lines[idx];
+                    var raw = entry.raw || entry.message || '';
+                    var match = false;
+                    if (tokens.length === 0) match = true;
+                    else {
+                        var rawLower = raw.toLowerCase();
+                        for (var t = 0; t < tokens.length; t++) {
+                            if (rawLower.indexOf(tokens[t].toLowerCase()) !== -1) { match = true; break; }
+                        }
+                    }
+                    if (match) {
+                        var rawLower = raw.toLowerCase();
+                        var spec = 0;
+                        for (var ti = 0; ti < tokens.length; ti++) {
+                            if (rawLower.indexOf(tokens[ti].toLowerCase()) !== -1 && tokens[ti].length > spec) spec = tokens[ti].length;
+                        }
+                        candidates.push({ pod: podName, index: idx, entry: entry, specificity: spec });
+                    }
+                }
+            }
+            if (candidates.length === 0) return 'No matching log lines found for: ' + (query || '').trim();
+
+            var levelOrder = { ERROR: 0, WARNING: 1, INFO: 2 };
+            function sortByLevelSpecTime(a, b) {
+                var la = levelOrder[a.entry.level] != null ? levelOrder[a.entry.level] : 3;
+                var lb = levelOrder[b.entry.level] != null ? levelOrder[b.entry.level] : 3;
+                if (la !== lb) return la - lb;
+                var sa = a.specificity != null ? a.specificity : 0;
+                var sb = b.specificity != null ? b.specificity : 0;
+                if (sa !== sb) return sb - sa;
+                var ta = a.entry.timestampDate && a.entry.timestampDate.getTime ? a.entry.timestampDate.getTime() : 0;
+                var tb = b.entry.timestampDate && b.entry.timestampDate.getTime ? b.entry.timestampDate.getTime() : 0;
+                return ta - tb;
+            }
+            var specificTokens = tokens.filter(function(t) { return t.length >= 6 || t.indexOf('.') !== -1 || /HSPC0x/i.test(t); });
+            var phase1 = [];
+            var phase2 = [];
+            for (var pi = 0; pi < candidates.length; pi++) {
+                var c = candidates[pi];
+                var rawLow = (c.entry.raw || c.entry.message || '').toLowerCase();
+                var hasSpecific = specificTokens.length > 0 && specificTokens.some(function(st) { return rawLow.indexOf(st.toLowerCase()) !== -1; });
+                if (hasSpecific) phase1.push(c); else phase2.push(c);
+            }
+            phase1.sort(sortByLevelSpecTime);
+            phase2.sort(sortByLevelSpecTime);
+            var phase1Info = phase1.filter(function(c) { return c.entry.level === 'INFO'; });
+            var phase1Other = phase1.filter(function(c) { return c.entry.level !== 'INFO'; });
+            var combined = [];
+            var seenKey = {};
+            var maxPhase1Info = 3;
+            var maxPhase1Total = 10;
+            for (var ii = 0; ii < phase1Info.length && combined.length < maxAnchorLines; ii++) {
+                var ki = normalizedLogKey(phase1Info[ii].entry.raw || phase1Info[ii].entry.message);
+                if (!seenKey[ki]) { seenKey[ki] = true; combined.push(phase1Info[ii]); if (combined.length >= maxPhase1Info) break; }
+            }
+            for (var io = 0; io < phase1Other.length && combined.length < maxPhase1Total && combined.length < maxAnchorLines; io++) {
+                var ko = normalizedLogKey(phase1Other[io].entry.raw || phase1Other[io].entry.message);
+                if (!seenKey[ko]) { seenKey[ko] = true; combined.push(phase1Other[io]); }
+            }
+            for (var i2 = 0; i2 < phase2.length && combined.length < maxAnchorLines; i2++) {
+                var k2 = normalizedLogKey(phase2[i2].entry.raw || phase2[i2].entry.message);
+                if (!seenKey[k2]) { seenKey[k2] = true; combined.push(phase2[i2]); }
+            }
+            candidates = combined;
+
+            var groups = {};
+            for (var i = 0; i < candidates.length; i++) {
+                var c = candidates[i];
+                var key = normalizedLogKey(c.entry.raw || c.entry.message);
+                if (!groups[key]) groups[key] = { count: 0, representative: null };
+                groups[key].count++;
+                if (!groups[key].representative) groups[key].representative = c;
+            }
+
+            var linesOut = 0;
+            var anchorsOut = 0;
+            var blocks = [];
+            var groupKeys = Object.keys(groups);
+            // anchorsOut is the primary gate (ensures all matched anchors appear when possible);
+            // linesOut < maxTotalLines is a safety ceiling on total context volume only.
+            for (var g = 0; g < groupKeys.length && anchorsOut < maxAnchorLines && linesOut < maxTotalLines; g++) {
+                var k = groupKeys[g];
+                var gr = groups[k];
+                var rep = gr.representative;
+                var pod = rep.pod;
+                var idx = rep.index;
+                var arr = state.logs[pod];
+                if (!Array.isArray(arr)) continue;
+
+                var beforeStart = Math.max(0, idx - contextBefore);
+                var beforeEnd = idx;
+                var afterStart = idx + 1;
+                var afterEnd = Math.min(arr.length, idx + 1 + contextAfter);
+
+                var block = '--- Pod: ' + pod + ' (context around 1 of ' + gr.count + ' occurrence' + (gr.count !== 1 ? 's' : '') + ') ---\n';
+                for (var b = beforeStart; b < beforeEnd; b++) {
+                    block += (arr[b].raw || arr[b].message || '') + '\n';
+                    linesOut++;
+                }
+                var anchorLine = rep.entry.raw || rep.entry.message || '';
+                block += '>>> ANCHOR' + (gr.count > 1 ? ' (occurred ' + gr.count + ' times)' : '') + ' <<<\n';
+                block += anchorLine + '\n';
+                linesOut++;
+                anchorsOut++;
+                for (var a = afterStart; a < afterEnd; a++) {
+                    block += (arr[a].raw || arr[a].message || '') + '\n';
+                    linesOut++;
+                }
+                blocks.push(block);
+            }
+            return blocks.join('\n');
+        }
+
+        // Generic chat API call (OpenAI-compatible messages array). Returns { ok, result, error }.
+        async function callChatAPI(apiKey, messages, options) {
+            options = options || {};
+            var baseUrl = (options.apiUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+            var model = options.model || 'gpt-4o-mini';
+            try {
+                var response = await fetch(baseUrl + '/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+                    body: JSON.stringify({ model: model, messages: messages, max_tokens: options.max_tokens != null ? options.max_tokens : DEFAULT_LLM_MAX_OUTPUT_TOKENS, temperature: 0.3 })
+                });
+                var data = await response.json().catch(function() { return {}; });
+                if (!response.ok) {
+                    var errMsg = data.error && data.error.message ? data.error.message : (data.error || response.statusText || 'Request failed');
+                    if (response.status === 429) errMsg = 'Rate limit exceeded (429). Wait a minute and try again.';
+                    else if (response.status === 503) errMsg = 'Service unavailable (503). Try again in a moment.';
+                    return { ok: false, error: String(errMsg) };
+                }
+                var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+                return content != null ? { ok: true, result: String(content).trim() } : { ok: false, error: 'No content in response' };
+            } catch (err) {
+                return { ok: false, error: err.message || String(err) };
+            }
+        }
+
+        // Bounded multipath excerpt from state.multipath for chat (per cluster/node, same bounds as analysis payload).
+        function getMultipathExcerptForChat() {
+            if (!state.multipath || typeof state.multipath !== 'object') return '';
+            var maxCharsPerNode = 12000;
+            var maxNodesPerCluster = 15;
+            var parts = [];
+            for (var cluster in state.multipath) {
+                var nodes = state.multipath[cluster];
+                if (!nodes || typeof nodes !== 'object') continue;
+                var nodeNames = Object.keys(nodes).slice(0, maxNodesPerCluster);
+                for (var i = 0; i < nodeNames.length; i++) {
+                    var nodeName = nodeNames[i];
+                    var content = nodes[nodeName];
+                    if (!content || typeof content !== 'string') continue;
+                    var excerpt = content.length > maxCharsPerNode ? content.substring(0, maxCharsPerNode) + '\n... (truncated)' : content;
+                    parts.push('--- Cluster: ' + cluster + ', Node: ' + nodeName + ' ---\n' + excerpt);
+                }
+            }
+            return parts.length ? parts.join('\n\n') : '';
+        }
+
+        // Build messages for chat (excerpts + user question + optional history) and send
+        async function sendChatMessage(userMessage, conversationHistory, apiKey, options) {
+            var excerpts = getRelevantLogExcerpts(userMessage, { maxAnchorLines: 60, contextBefore: 12, contextAfter: 8, maxTotalLines: 600 });
+            var multipathBlock = getMultipathExcerptForChat();
+            if (multipathBlock) multipathBlock = '\n\n--- Multipath configuration (from bundle, /etc/multipath.conf and multipath -ll per node) ---\n\n' + multipathBlock;
+            var fullContent = 'Relevant log excerpts:\n\n' + excerpts + multipathBlock + '\n\nUser question: ' + userMessage;
+            var excerptTokens = estimateTokens(fullContent);
+            var systemContent = 'You are helping the user interpret their Hitachi CSI (HSPC) log excerpts. Below are relevant log lines with surrounding context. Duplicate lines are summarized as (occurred N times). Answer based only on the provided excerpts and the conversation. Pay attention to INFO-level lines that match the user\'s question (e.g. file paths, config names, or specific identifiers); they often explain configuration or environment details even when no ERROR is present. When you have relevant details from the excerpts, provide specific, detailed answers and cite log evidence (e.g. quote the line that says /etc/multipath.conf does not exist). If multipath configuration from the bundle is present (per-node /etc/multipath.conf and multipath -ll output), use it when relevant to the question.';
+            var messages = [{ role: 'system', content: systemContent }];
+            var history = conversationHistory || [];
+            var lastTurns = history.slice(-10);
+            for (var h = 0; h < lastTurns.length; h++) {
+                messages.push({ role: lastTurns[h].role, content: lastTurns[h].content });
+            }
+            messages.push({ role: 'user', content: fullContent });
+            var apiResult = await callChatAPI(apiKey, messages, options);
+            apiResult.excerptTokens = excerptTokens;
+            return apiResult;
+        }
+
         // Track volume operations from CSI responses
         function trackVolumeOperation(line, timestamp, podName) {
             // Match CSI gRPC Response lines
@@ -2837,6 +3744,370 @@
             }
         }
 
+        // Strip cluster prefix and container suffix from a log pod name for podHealth lookup.
+        function getBasePodName(podName) {
+            if (!podName) return podName;
+            const slash = podName.lastIndexOf('/');
+            const withoutCluster = slash >= 0 ? podName.substring(slash + 1) : podName;
+            const underscore = withoutCluster.indexOf('_');
+            return underscore >= 0 ? withoutCluster.substring(0, underscore) : withoutCluster;
+        }
+
+        function getPodHealthKeysForLogPod(podName) {
+            const keys = [];
+            if (!podName) return keys;
+            keys.push(podName);
+            const base = getBasePodName(podName);
+            if (base !== podName) keys.push(base);
+            if (podName.includes('/')) {
+                keys.push(`${podName.substring(0, podName.indexOf('/'))}/${base}`);
+            }
+            return keys;
+        }
+
+        // Resolve Kubernetes node name from cluster-context pod metadata when NodeGetInfo is absent.
+        function getNodeNameForPod(podName) {
+            for (const key of getPodHealthKeysForLogPod(podName)) {
+                const node = state.podHealth[key]?.node;
+                if (node) return node;
+            }
+            return null;
+        }
+
+        function resolveHostNodeId(hostInfo) {
+            if (hostInfo.nodeId) return hostInfo.nodeId;
+            if (hostInfo.nodes) {
+                for (const pod of hostInfo.nodes) {
+                    const fromLog = state.config.podNodeIds[pod];
+                    if (fromLog) return fromLog;
+                    const fromContext = getNodeNameForPod(pod);
+                    if (fromContext) return fromContext;
+                }
+            }
+            return null;
+        }
+
+        // Match multipath files when node names differ (e.g. worker1 vs worker1.dc1.ocp.example.local).
+        function lookupMultipathContent(nodeId, mpNodes) {
+            if (!nodeId || !mpNodes) return null;
+            if (mpNodes[nodeId]) return mpNodes[nodeId];
+            const shortName = nodeId.split('.')[0];
+            if (mpNodes[shortName]) return mpNodes[shortName];
+            for (const [key, content] of Object.entries(mpNodes)) {
+                if (key.split('.')[0] === shortName || nodeId.startsWith(key + '.')) {
+                    return content;
+                }
+            }
+            return null;
+        }
+
+        // Storage classes use 6-digit serials; CSI volume IDs often include a vendor prefix.
+        function normalizeArraySerial(serial) {
+            if (serial == null || serial === 'Unknown') return serial;
+            const digits = String(serial).replace(/\D/g, '');
+            if (!digits) return 'Unknown';
+            let s = digits.length > 6 ? digits.slice(-6) : digits;
+            // SC parameters often drop leading zeros (41721) while volume IDs retain them (041721).
+            s = s.replace(/^0+/, '') || '0';
+            return s;
+        }
+
+        function extractArraySerialFromVolumeId(volumeId) {
+            const scsiMatch = volumeId.match(/--scsi--(\d+)--/i);
+            if (scsiMatch) return normalizeArraySerial(scsiMatch[1]);
+            const fallback = volumeId.match(/--(\d{5,})--/);
+            if (fallback) return normalizeArraySerial(fallback[1]);
+            return 'Unknown';
+        }
+
+        function extractMappingsFromLine(line) {
+            const marker = 'mappings:';
+            const idx = line.indexOf(marker);
+            if (idx === -1) return null;
+            let start = idx + marker.length;
+            while (start < line.length && line[start] !== '[') start++;
+            if (start >= line.length || line[start] !== '[') return null;
+            let depth = 0;
+            for (let i = start; i < line.length; i++) {
+                if (line[i] === '[') depth++;
+                else if (line[i] === ']') {
+                    depth--;
+                    if (depth === 0) {
+                        try {
+                            return JSON.parse(line.substring(start, i + 1));
+                        } catch (e) {
+                            return null;
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        function applyVolumeConfigFromLine(line, podName, level) {
+            if (line.indexOf('Volume ID') === -1) return;
+            const isNodeVolumeOp = line.indexOf('NodeStageVolume') !== -1 || line.indexOf('NodePublishVolume') !== -1;
+            if (!isNodeVolumeOp) return;
+
+            const volumeIdMatch = line.match(/Volume ID \[([^\]]+)\]/);
+            const ldevMatch = line.match(/ldevIDDec:(\d+)/);
+            if (!volumeIdMatch || !ldevMatch) return;
+
+            const volumeId = volumeIdMatch[1];
+            if (volumeId === 'Volume ID not available') return;
+
+            const ldevId = ldevMatch[1];
+            const ldevHexMatch = line.match(/ldevIDHex:([0-9a-fA-F:]+)/);
+            const nicknameMatch = line.match(/nickname:([^\s\]]+)/);
+            const sizeMatch = line.match(/size:([^\s\]]+)/);
+            const portsMatch = line.match(/ports:([^\s\]]+)/);
+            const ldevHex = ldevHexMatch ? ldevHexMatch[1] : '';
+            const nickname = nicknameMatch ? nicknameMatch[1] : '';
+            const size = sizeMatch ? sizeMatch[1] : '';
+            const ports = portsMatch ? portsMatch[1].split(',').map(p => p.trim()).filter(Boolean) : [];
+            const arraySerial = extractArraySerialFromVolumeId(volumeId);
+
+            if (!state.config.volumes[volumeId]) {
+                state.config.volumes[volumeId] = {
+                    volumeId: volumeId,
+                    ldevId: ldevId,
+                    ldevHex: ldevHex,
+                    nickname: nickname,
+                    size: size,
+                    ports: ports,
+                    mappings: [],
+                    nodes: new Set(),
+                    arraySerial: arraySerial,
+                    errors: 0,
+                    warnings: 0
+                };
+            } else {
+                const vol = state.config.volumes[volumeId];
+                if (ldevHex && !vol.ldevHex) vol.ldevHex = ldevHex;
+                if (nickname && !vol.nickname) vol.nickname = nickname;
+                if (size && !vol.size) vol.size = size;
+                if (ports.length && !vol.ports.length) vol.ports = ports;
+                if (arraySerial !== 'Unknown') vol.arraySerial = arraySerial;
+            }
+
+            if (level === 'ERROR') state.config.volumes[volumeId].errors++;
+            if (level === 'WARNING') state.config.volumes[volumeId].warnings++;
+
+            const mappings = extractMappingsFromLine(line);
+            if (mappings) {
+                for (const mapping of mappings) {
+                    const existing = state.config.volumes[volumeId].mappings.find(
+                        m => m.identifier === mapping.identifier && m.lun === mapping.lun
+                    );
+                    if (!existing) state.config.volumes[volumeId].mappings.push(mapping);
+                }
+            }
+
+            state.config.volumes[volumeId].nodes.add(podName);
+
+            if (!state.config.arrays[arraySerial]) {
+                state.config.arrays[arraySerial] = {
+                    serial: arraySerial,
+                    volumes: new Set(),
+                    ports: new Set(),
+                    errors: 0,
+                    warnings: 0
+                };
+            }
+            state.config.arrays[arraySerial].volumes.add(volumeId);
+            if (level === 'ERROR') state.config.arrays[arraySerial].errors++;
+            if (level === 'WARNING') state.config.arrays[arraySerial].warnings++;
+
+            for (const port of ports) {
+                const portKey = `${port}:${arraySerial}`;
+                if (!state.config.ports[portKey]) {
+                    state.config.ports[portKey] = {
+                        name: port,
+                        volumes: new Set(),
+                        arraySerial: arraySerial,
+                        errors: 0,
+                        warnings: 0
+                    };
+                }
+                state.config.ports[portKey].volumes.add(volumeId);
+                state.config.arrays[arraySerial].ports.add(port);
+                if (level === 'ERROR') state.config.ports[portKey].errors++;
+                if (level === 'WARNING') state.config.ports[portKey].warnings++;
+            }
+        }
+
+        function findPortInfoEntry(portsInfo, portName, arraySerial) {
+            const normalized = normalizeArraySerial(arraySerial);
+            for (const key of [`${portName}:${normalized}`, `${portName}:${arraySerial}`]) {
+                if (portsInfo.has(key)) return portsInfo.get(key);
+            }
+            for (const info of portsInfo.values()) {
+                if (info.name === portName && normalizeArraySerial(info.arraySerial) === normalized) {
+                    return info;
+                }
+            }
+            return null;
+        }
+
+        function attachVolumeToPortUsage(portsInfo, vol) {
+            const serial = vol.arraySerial || extractArraySerialFromVolumeId(vol.volumeId);
+            for (const portName of (vol.ports || [])) {
+                const entry = findPortInfoEntry(portsInfo, portName, serial);
+                if (entry) entry.volumes.add(vol.volumeId);
+            }
+        }
+
+        function buildWwpnToHostLookup(hosts) {
+            const lookup = new Map();
+            for (const host of Object.values(hosts)) {
+                if (!host.wwpn) continue;
+                const nodeId = resolveHostNodeId(host);
+                lookup.set(host.wwpn.toLowerCase(), {
+                    nodeId: nodeId || null,
+                    wwpn: host.wwpn,
+                    wwnn: host.wwnn || null
+                });
+            }
+            return lookup;
+        }
+
+        function renderVolumeLunMappingsHtml(mappings, wwpnToHost) {
+            if (!mappings || mappings.length === 0) return '';
+
+            const lunsByWwpn = {};
+            for (const mapping of mappings) {
+                if (!mapping.identifier) continue;
+                const wwpn = mapping.identifier.toLowerCase();
+                if (!lunsByWwpn[wwpn]) lunsByWwpn[wwpn] = new Set();
+                lunsByWwpn[wwpn].add(mapping.lun);
+            }
+
+            const lunsByNode = new Map();
+            for (const [wwpn, luns] of Object.entries(lunsByWwpn)) {
+                const hostInfo = wwpnToHost.get(wwpn);
+                const nodeId = hostInfo && hostInfo.nodeId ? hostInfo.nodeId : null;
+                const nodeKey = nodeId || `_unmapped_${wwpn}`;
+                if (!lunsByNode.has(nodeKey)) {
+                    lunsByNode.set(nodeKey, { nodeId, wwpns: new Map() });
+                }
+                lunsByNode.get(nodeKey).wwpns.set(wwpn, luns);
+            }
+
+            const sortedGroups = Array.from(lunsByNode.values()).sort((a, b) => {
+                if (a.nodeId && !b.nodeId) return -1;
+                if (!a.nodeId && b.nodeId) return 1;
+                return (a.nodeId || '').localeCompare(b.nodeId || '');
+            });
+
+            let html = '';
+            for (const group of sortedGroups) {
+                html += `<div style="margin: 3px 0; padding: 4px 6px; background: var(--bg-secondary); border-radius: 4px; border-left: 2px solid var(--accent-blue);">`;
+                if (group.nodeId) {
+                    html += `<div><span class="node-badge">${escapeHtml(group.nodeId)}</span></div>`;
+                } else {
+                    html += `<div style="font-size: 10px; color: var(--text-secondary);">Unmapped host</div>`;
+                }
+
+                for (const [wwpn, luns] of [...group.wwpns.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+                    const hostInfo = wwpnToHost.get(wwpn);
+                    const shortWwpn = wwpn.substring(wwpn.length - 8);
+                    const lunList = Array.from(luns).sort((a, b) => Number(a) - Number(b));
+                    const wwnnHint = hostInfo && hostInfo.wwnn
+                        ? `WWPN: ${hostInfo.wwpn}\nWWNN: ${hostInfo.wwnn}`
+                        : `WWPN: ${wwpn}`;
+
+                    html += `<div style="margin-top: 2px; font-size: 11px;">`;
+                    html += `<span class="wwn-code" style="font-size: 10px;" title="${escapeHtml(wwnnHint)}">${shortWwpn}</span>`;
+                    html += `<span style="color: var(--text-secondary); font-size: 10px; margin: 0 4px;">→</span>`;
+                    for (const lun of lunList) {
+                        html += `<span class="lun-badge" title="LUN ID ${escapeHtml(String(lun))}"><span class="lun-badge-id">LUN</span><span class="lun-badge-value">${escapeHtml(String(lun))}</span></span>`;
+                    }
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            return html;
+        }
+
+        function buildVolumeSearchText(vol, wwpnToHost) {
+            const parts = [
+                vol.ldevId,
+                vol.ldevHex,
+                vol.nickname,
+                vol.volumeId,
+                vol.arraySerial,
+                vol.size,
+                ...(vol.ports || [])
+            ];
+            for (const mapping of (vol.mappings || [])) {
+                if (mapping.identifier) {
+                    parts.push(mapping.identifier);
+                    if (mapping.identifier.length > 8) {
+                        parts.push(mapping.identifier.slice(-8));
+                    }
+                }
+                if (mapping.lun != null && mapping.lun !== '') {
+                    parts.push(String(mapping.lun));
+                }
+                const hostInfo = wwpnToHost.get(String(mapping.identifier || '').toLowerCase());
+                if (hostInfo) {
+                    if (hostInfo.nodeId) parts.push(hostInfo.nodeId);
+                    if (hostInfo.wwnn) parts.push(hostInfo.wwnn);
+                    if (hostInfo.wwpn) parts.push(hostInfo.wwpn);
+                }
+            }
+            return parts.filter(Boolean).join(' ').toLowerCase();
+        }
+
+        function filterVolumeTable() {
+            const input = document.getElementById('volumeSearchInput');
+            const countEl = document.getElementById('volumeSearchCount');
+            const emptyEl = document.getElementById('volumeSearchEmpty');
+            const tbody = document.querySelector('#volumes-section tbody');
+            if (!tbody) return;
+
+            const term = (input ? input.value : state.volumeSearchTerm || '').trim().toLowerCase();
+            state.volumeSearchTerm = term;
+
+            const rows = tbody.querySelectorAll('tr.volume-table-row');
+            let visible = 0;
+            rows.forEach(row => {
+                const haystack = row.getAttribute('data-volume-search') || '';
+                const match = !term || haystack.includes(term);
+                row.classList.toggle('volume-row-hidden', !match);
+                row.classList.toggle('volume-row-match', match && term.length > 0);
+                if (match) visible++;
+            });
+
+            if (countEl) {
+                countEl.textContent = term
+                    ? `${visible} of ${rows.length} volumes`
+                    : `${rows.length} volume${rows.length !== 1 ? 's' : ''}`;
+            }
+            if (emptyEl) {
+                emptyEl.style.display = term && visible === 0 ? 'block' : 'none';
+            }
+        }
+
+        function setupVolumeSearch() {
+            const input = document.getElementById('volumeSearchInput');
+            const clearBtn = document.getElementById('volumeSearchClear');
+            if (!input) return;
+
+            input.value = state.volumeSearchTerm || '';
+            input.oninput = () => filterVolumeTable();
+            if (clearBtn) {
+                clearBtn.onclick = (e) => {
+                    e.preventDefault();
+                    input.value = '';
+                    state.volumeSearchTerm = '';
+                    filterVolumeTable();
+                    input.focus();
+                };
+            }
+            filterVolumeTable();
+        }
+
         // Extract configuration data from log lines
         function extractConfigData(line, timestamp, podName, level) {
             // level is now passed as a parameter for efficiency
@@ -2856,6 +4127,10 @@
                     };
                 }
                 state.config.hosts[wwpn].nodes.add(podName);
+                if (!state.config.hosts[wwpn].nodeId) {
+                    const nodeId = state.config.podNodeIds[podName] || getNodeNameForPod(podName);
+                    if (nodeId) state.config.hosts[wwpn].nodeId = nodeId;
+                }
                 
                 if (level === 'ERROR') state.config.hosts[wwpn].errors++;
                 if (level === 'WARNING') state.config.hosts[wwpn].warnings++;
@@ -2866,8 +4141,9 @@
             const nodeIdMatch = line.match(/node_id:"([^"]+)"/);
             if (nodeIdMatch && line.indexOf('NodeGetInfo') !== -1) {
                 const nodeId = nodeIdMatch[1];
-                // Associate this node with its WWNs
-                for (const [wwpn, hostInfo] of Object.entries(state.config.hosts)) {
+                state.config.podNodeIds[podName] = nodeId;
+                // Associate this node with its WWNs (including WWNs discovered after NodeGetInfo)
+                for (const hostInfo of Object.values(state.config.hosts)) {
                     if (hostInfo.nodes.has(podName)) {
                         hostInfo.nodeId = nodeId;
                     }
@@ -2875,102 +4151,8 @@
                 return;
             }
 
-            // Extract Volume/LUN mappings from NodeStageVolume
-            if (line.indexOf('NodeStageVolume') !== -1 && line.indexOf('Volume ID') !== -1) {
-                const volumeIdMatch = line.match(/Volume ID \[([^\]]+)\]/);
-                const mappingsMatch = line.match(/mappings:\[([^\]]+)\]/);
-                const ldevMatch = line.match(/ldevIDDec:(\d+)/);
-                const ldevHexMatch = line.match(/ldevIDHex:([0-9a-fA-F:]+)/);
-                const nicknameMatch = line.match(/nickname:([^\s\]]+)/);
-                const sizeMatch = line.match(/size:([^\s\]]+)/);
-                const portsMatch = line.match(/ports:([^\s\]]+)/);
-                
-                if (volumeIdMatch && ldevMatch) {
-                    const volumeId = volumeIdMatch[1];
-                    const ldevId = ldevMatch[1];
-                    const ldevHex = ldevHexMatch ? ldevHexMatch[1] : '';
-                    const nickname = nicknameMatch ? nicknameMatch[1] : '';
-                    const size = sizeMatch ? sizeMatch[1] : '';
-                    const ports = portsMatch ? portsMatch[1].split(',') : [];
-
-                    // Extract storage array serial from Volume ID (format: 01--scsi--SERIAL--LDEV--...)
-                    const serialMatch = volumeId.match(/--(\d+)--/);
-                    const arraySerial = serialMatch ? serialMatch[1] : 'Unknown';
-
-                    if (!state.config.volumes[volumeId]) {
-                        state.config.volumes[volumeId] = {
-                            volumeId: volumeId,
-                            ldevId: ldevId,
-                            ldevHex: ldevHex,
-                            nickname: nickname,
-                            size: size,
-                            ports: ports,
-                            mappings: [],
-                            nodes: new Set(),
-                            arraySerial: arraySerial,
-                            errors: 0,
-                            warnings: 0
-                        };
-                    }
-
-                    // Track errors/warnings for this volume
-                    if (level === 'ERROR') state.config.volumes[volumeId].errors++;
-                    if (level === 'WARNING') state.config.volumes[volumeId].warnings++;
-
-                    // Parse mappings
-                    if (mappingsMatch) {
-                        try {
-                            const mappingsJson = '[' + mappingsMatch[1] + ']';
-                            const mappings = JSON.parse(mappingsJson);
-                            for (const mapping of mappings) {
-                                const existing = state.config.volumes[volumeId].mappings.find(
-                                    m => m.identifier === mapping.identifier && m.lun === mapping.lun
-                                );
-                                if (!existing) {
-                                    state.config.volumes[volumeId].mappings.push(mapping);
-                                }
-                            }
-                        } catch (e) {
-                            // Ignore JSON parse errors
-                        }
-                    }
-
-                    state.config.volumes[volumeId].nodes.add(podName);
-                    
-                    // Track storage array
-                    if (!state.config.arrays[arraySerial]) {
-                        state.config.arrays[arraySerial] = {
-                            serial: arraySerial,
-                            volumes: new Set(),
-                            ports: new Set(),
-                            errors: 0,
-                            warnings: 0
-                        };
-                    }
-                    state.config.arrays[arraySerial].volumes.add(volumeId);
-                    if (level === 'ERROR') state.config.arrays[arraySerial].errors++;
-                    if (level === 'WARNING') state.config.arrays[arraySerial].warnings++;
-
-                    // Track port usage - use composite key (port:arraySerial) to handle same port name on different arrays
-                    for (const port of ports) {
-                        const portKey = `${port}:${arraySerial}`;
-                        if (!state.config.ports[portKey]) {
-                            state.config.ports[portKey] = {
-                                name: port,
-                                volumes: new Set(),
-                                arraySerial: arraySerial,
-                                errors: 0,
-                                warnings: 0
-                            };
-                        }
-                        state.config.ports[portKey].volumes.add(volumeId);
-                        state.config.arrays[arraySerial].ports.add(port);
-                        
-                        if (level === 'ERROR') state.config.ports[portKey].errors++;
-                        if (level === 'WARNING') state.config.ports[portKey].warnings++;
-                    }
-                }
-            }
+            // Extract Volume/LUN mappings from NodeStageVolume / NodePublishVolume
+            applyVolumeConfigFromLine(line, podName, level);
         }
 
         // Helper function to get cluster context content (handles both old string format and new object format)
@@ -3270,87 +4452,152 @@
             }
             
             parseStorageClasses(clusterContextContent);
+            parseVolumeSnapshotClasses(clusterContextContent);
             state.lazyParsed.storageClasses = true;
         }
         
+        function parseStorageClassBlock(block) {
+            try {
+                const sc = {
+                    name: null,
+                    isDefault: false,
+                    type: 'standard',
+                    provisioner: null,
+                    reclaimPolicy: null,
+                    volumeBindingMode: null,
+                    allowVolumeExpansion: false,
+                    parameters: {},
+                    creationTimestamp: null,
+                    yaml: null
+                };
+
+                const nameMatch = block.match(/^\s*name:\s*(.+)$/m);
+                if (nameMatch) sc.name = nameMatch[1].trim();
+
+                const provisionerMatch = block.match(/^provisioner:\s*(.+)$/m);
+                if (provisionerMatch) sc.provisioner = provisionerMatch[1].trim();
+
+                const reclaimMatch = block.match(/^reclaimPolicy:\s*(.+)$/m);
+                if (reclaimMatch) sc.reclaimPolicy = reclaimMatch[1].trim();
+
+                const bindingMatch = block.match(/^volumeBindingMode:\s*(.+)$/m);
+                if (bindingMatch) sc.volumeBindingMode = bindingMatch[1].trim();
+
+                const expansionMatch = block.match(/^allowVolumeExpansion:\s*(.+)$/m);
+                if (expansionMatch) sc.allowVolumeExpansion = expansionMatch[1].trim() === 'true';
+
+                const defaultMatch = block.match(/storageclass\.kubernetes\.io\/is-default-class:\s*"true"/);
+                if (defaultMatch) sc.isDefault = true;
+
+                const timestampMatch = block.match(/creationTimestamp:\s*"([^"]+)"/);
+                if (timestampMatch) sc.creationTimestamp = timestampMatch[1].trim();
+
+                const paramsMatch = block.match(/^parameters:\s*\n((?:^\s{2}\S.*\n?)+)/m);
+                if (paramsMatch) {
+                    const paramsSection = paramsMatch[1];
+                    const paramLines = paramsSection.split('\n').filter(l => l.trim());
+
+                    for (const line of paramLines) {
+                        const paramMatch = line.match(/^\s{2}(\S+):\s*(.+)$/);
+                        if (paramMatch) {
+                            const key = paramMatch[1].trim();
+                            const value = paramMatch[2].trim().replace(/^["']|["']$/g, '');
+                            sc.parameters[key] = value;
+                        }
+                    }
+                }
+
+                if (sc.parameters.replicationType === 'stretched') {
+                    sc.type = 'stretched';
+                }
+
+                if (sc.name) {
+                    sc.yaml = block.trim();
+                    return sc;
+                }
+            } catch (e) {
+                console.error('Error parsing storage class block:', e);
+            }
+            return null;
+        }
+
         // Parse Storage Classes from cluster context
         function parseStorageClasses(content) {
             state.config.storageClasses = [];
-            
-            // Find the "=== HSPC StorageClasses ===" section
+
             const scSectionMatch = content.match(/===\s+HSPC StorageClasses\s+===\n([\s\S]*?)(?:\n===|$)/);
             if (!scSectionMatch) return;
-            
+
             const scSection = scSectionMatch[1];
-            
-            // Split by "allowVolumeExpansion:" which marks the beginning of each StorageClass
             const scBlocks = scSection.split(/(?=^allowVolumeExpansion:)/m).filter(b => b.trim() && b.includes('kind: StorageClass'));
-            
+
             for (const block of scBlocks) {
+                const sc = parseStorageClassBlock(block);
+                if (sc) state.config.storageClasses.push(sc);
+            }
+        }
+
+        function parseVolumeSnapshotClassBlocks(sectionText) {
+            const results = [];
+            if (!sectionText || !sectionText.trim()) return results;
+            const vscBlocks = sectionText.split(/(?=^apiVersion: snapshot\.storage\.k8s\.io\/)/m).filter(b => b.trim() && b.includes('kind: VolumeSnapshotClass'));
+            for (const block of vscBlocks) {
                 try {
-                    const sc = {
+                    const vsc = {
                         name: null,
-                        isDefault: false,
-                        type: 'standard', // 'standard' or 'stretched'
-                        provisioner: null,
-                        reclaimPolicy: null,
-                        volumeBindingMode: null,
-                        allowVolumeExpansion: false,
+                        driver: null,
+                        deletionPolicy: null,
                         parameters: {},
-                        creationTimestamp: null
+                        storageClassRef: null,
+                        description: null,
+                        isVelero: false,
+                        creationTimestamp: null,
+                        yaml: null
                     };
-                    
-                    // Parse basic fields
                     const nameMatch = block.match(/^\s*name:\s*(.+)$/m);
-                    if (nameMatch) sc.name = nameMatch[1].trim();
-                    
-                    const provisionerMatch = block.match(/^provisioner:\s*(.+)$/m);
-                    if (provisionerMatch) sc.provisioner = provisionerMatch[1].trim();
-                    
-                    const reclaimMatch = block.match(/^reclaimPolicy:\s*(.+)$/m);
-                    if (reclaimMatch) sc.reclaimPolicy = reclaimMatch[1].trim();
-                    
-                    const bindingMatch = block.match(/^volumeBindingMode:\s*(.+)$/m);
-                    if (bindingMatch) sc.volumeBindingMode = bindingMatch[1].trim();
-                    
-                    const expansionMatch = block.match(/^allowVolumeExpansion:\s*(.+)$/m);
-                    if (expansionMatch) sc.allowVolumeExpansion = expansionMatch[1].trim() === 'true';
-                    
-                    const defaultMatch = block.match(/storageclass\.kubernetes\.io\/is-default-class:\s*"true"/);
-                    if (defaultMatch) sc.isDefault = true;
-                    
+                    if (nameMatch) vsc.name = nameMatch[1].trim();
+                    const driverMatch = block.match(/^driver:\s*(.+)$/m);
+                    if (driverMatch) vsc.driver = driverMatch[1].trim();
+                    const deletionMatch = block.match(/^deletionPolicy:\s*(.+)$/m);
+                    if (deletionMatch) vsc.deletionPolicy = deletionMatch[1].trim();
+                    const scRefMatch = block.match(/^\s+storageclass-ref:\s*(.+)$/m);
+                    if (scRefMatch) vsc.storageClassRef = scRefMatch[1].trim().replace(/^["']|["']$/g, '');
+                    const descMatch = block.match(/^\s+kubernetes\.io\/description:\s*(.+)$/m);
+                    if (descMatch) vsc.description = descMatch[1].trim().replace(/^["']|["']$/g, '');
+                    if (/velero\.io\/csi-volumesnapshot-class:\s*"?true"?/m.test(block)) {
+                        vsc.isVelero = true;
+                    }
                     const timestampMatch = block.match(/creationTimestamp:\s*"([^"]+)"/);
-                    if (timestampMatch) sc.creationTimestamp = timestampMatch[1].trim();
-                    
-                    // Parse parameters section
+                    if (timestampMatch) vsc.creationTimestamp = timestampMatch[1].trim();
                     const paramsMatch = block.match(/^parameters:\s*\n((?:^\s{2}\S.*\n?)+)/m);
                     if (paramsMatch) {
                         const paramsSection = paramsMatch[1];
                         const paramLines = paramsSection.split('\n').filter(l => l.trim());
-                        
                         for (const line of paramLines) {
                             const paramMatch = line.match(/^\s{2}(\S+):\s*(.+)$/);
                             if (paramMatch) {
                                 const key = paramMatch[1].trim();
-                                const value = paramMatch[2].trim().replace(/^"|"$/g, ''); // Remove quotes
-                                sc.parameters[key] = value;
+                                const value = paramMatch[2].trim().replace(/^["']|["']$/g, '');
+                                vsc.parameters[key] = value;
                             }
                         }
                     }
-                    
-                    // Determine if this is a stretched (GAD) storage class
-                    if (sc.parameters.replicationType === 'stretched') {
-                        sc.type = 'stretched';
-                    }
-                    
-                    // Only add if we got a name
-                    if (sc.name) {
-                        state.config.storageClasses.push(sc);
+                    if (vsc.name) {
+                        vsc.yaml = block.trim();
+                        results.push(vsc);
                     }
                 } catch (e) {
-                    console.error('Error parsing storage class block:', e);
+                    console.error('Error parsing volume snapshot class block:', e);
                 }
             }
+            return results;
+        }
+
+        function parseVolumeSnapshotClasses(content) {
+            state.config.volumeSnapshotClasses = [];
+            const vscSectionMatch = content.match(/===\s+HSPC VolumeSnapshotClasses\s+===\n([\s\S]*?)(?:\n===|$)/);
+            if (!vscSectionMatch) return;
+            state.config.volumeSnapshotClasses = parseVolumeSnapshotClassBlocks(vscSectionMatch[1]);
         }
 
         // Update UI
@@ -3371,7 +4618,18 @@
             document.getElementById('bundleInfo').textContent = `${containerCount} containers loaded`;
             document.getElementById('bundleFilename').textContent = state.bundleName || '-';
             document.getElementById('bundleTimestamp').textContent = state.bundleTimestamp;
-            
+
+            // Enable/disable AI Analysis and Chat Send based on bundle loaded
+            const aiBtn = document.getElementById('aiAnalyzeBtn');
+            const aiHint = document.getElementById('aiAnalyzeHint');
+            const aiChatSendBtn = document.getElementById('aiChatSendBtn');
+            if (aiBtn && aiHint) {
+                const hasBundle = Object.keys(state.logs).length > 0;
+                aiBtn.disabled = !hasBundle;
+                aiHint.textContent = hasBundle ? 'Ready. Click Analyze to run.' : 'Load a log bundle first.';
+                if (aiChatSendBtn) aiChatSendBtn.disabled = !hasBundle;
+            }
+
             // Update time filter visibility and date limits if time filter is set up
             const timeFilterGroup = document.getElementById('timeFilterGroup');
             if (timeFilterGroup) {
@@ -4484,12 +5742,40 @@
             // If no node/pod info, include it (shouldn't happen, but be safe)
             return true;
         }
+
+        // Group key for a host/WWN entry — prefer Kubernetes node name, else CSI pod name.
+        function getHostGroupKey(host) {
+            const nodeId = resolveHostNodeId(host);
+            if (nodeId && nodeId !== 'unknown') return nodeId;
+            if (host.nodes && host.nodes.size > 0) {
+                return 'pod:' + getBasePodName(Array.from(host.nodes)[0]);
+            }
+            return 'unknown';
+        }
+
+        function getHostGroupDisplayName(groupKey, group) {
+            if (groupKey.startsWith('pod:')) {
+                return group.nodeId && group.nodeId !== 'unknown' ? group.nodeId : groupKey.substring(4);
+            }
+            return groupKey;
+        }
+
+        function countCsiNodePods(cluster) {
+            let count = 0;
+            for (const key of Object.keys(state.podHealth)) {
+                if (!key.includes('hspc-csi-node')) continue;
+                if (cluster && !key.startsWith(cluster + '/')) continue;
+                count++;
+            }
+            return count;
+        }
         
         // Helper to get storage classes, arrays, and ports used by pods in current cluster
         function getClusterStorageResources(cluster) {
             if (!cluster) {
                 return {
                     storageClasses: state.config.storageClasses || [],
+                    volumeSnapshotClasses: state.config.volumeSnapshotClasses || [],
                     arrays: new Set(),
                     ports: new Set()
                 };
@@ -4498,6 +5784,7 @@
             // Get storage classes directly from this cluster's context (don't filter by volumes)
             const clusterContextContent = getClusterContext(cluster);
             const clusterStorageClasses = [];
+            const clusterVolumeSnapshotClasses = [];
             
             if (clusterContextContent) {
                 // Parse storage classes from this cluster's context
@@ -4505,72 +5792,16 @@
                 if (scSectionMatch) {
                     const scSection = scSectionMatch[1];
                     const scBlocks = scSection.split(/(?=^allowVolumeExpansion:)/m).filter(b => b.trim() && b.includes('kind: StorageClass'));
-                    
+
                     for (const block of scBlocks) {
-                        try {
-                            const sc = {
-                                name: null,
-                                isDefault: false,
-                                type: 'standard',
-                                provisioner: null,
-                                reclaimPolicy: null,
-                                volumeBindingMode: null,
-                                allowVolumeExpansion: false,
-                                parameters: {},
-                                creationTimestamp: null
-                            };
-                            
-                            // Parse basic fields
-                            const nameMatch = block.match(/^\s*name:\s*(.+)$/m);
-                            if (nameMatch) sc.name = nameMatch[1].trim();
-                            
-                            const provisionerMatch = block.match(/^provisioner:\s*(.+)$/m);
-                            if (provisionerMatch) sc.provisioner = provisionerMatch[1].trim();
-                            
-                            const reclaimMatch = block.match(/^reclaimPolicy:\s*(.+)$/m);
-                            if (reclaimMatch) sc.reclaimPolicy = reclaimMatch[1].trim();
-                            
-                            const bindingMatch = block.match(/^volumeBindingMode:\s*(.+)$/m);
-                            if (bindingMatch) sc.volumeBindingMode = bindingMatch[1].trim();
-                            
-                            const expansionMatch = block.match(/^allowVolumeExpansion:\s*(.+)$/m);
-                            if (expansionMatch) sc.allowVolumeExpansion = expansionMatch[1].trim() === 'true';
-                            
-                            const defaultMatch = block.match(/storageclass\.kubernetes\.io\/is-default-class:\s*"true"/);
-                            if (defaultMatch) sc.isDefault = true;
-                            
-                            const timestampMatch = block.match(/creationTimestamp:\s*"([^"]+)"/);
-                            if (timestampMatch) sc.creationTimestamp = timestampMatch[1].trim();
-                            
-                            // Parse parameters section
-                            const paramsMatch = block.match(/^parameters:\s*\n((?:^\s{2}\S.*\n?)+)/m);
-                            if (paramsMatch) {
-                                const paramsSection = paramsMatch[1];
-                                const paramLines = paramsSection.split('\n').filter(l => l.trim());
-                                
-                                for (const line of paramLines) {
-                                    const paramMatch = line.match(/^\s{2}(\S+):\s*(.+)$/);
-                                    if (paramMatch) {
-                                        const key = paramMatch[1].trim();
-                                        const value = paramMatch[2].trim().replace(/^"|"$/g, '');
-                                        sc.parameters[key] = value;
-                                    }
-                                }
-                            }
-                            
-                            // Determine if this is a stretched (GAD) storage class
-                            if (sc.parameters.replicationType === 'stretched') {
-                                sc.type = 'stretched';
-                            }
-                            
-                            // Only add if we got a name
-                            if (sc.name) {
-                                clusterStorageClasses.push(sc);
-                            }
-                        } catch (e) {
-                            console.error('Error parsing storage class block:', e);
-                        }
+                        const sc = parseStorageClassBlock(block);
+                        if (sc) clusterStorageClasses.push(sc);
                     }
+                }
+                
+                const vscSectionMatch = clusterContextContent.match(/===\s+HSPC VolumeSnapshotClasses\s+===\n([\s\S]*?)(?:\n===|$)/);
+                if (vscSectionMatch) {
+                    clusterVolumeSnapshotClasses.push(...parseVolumeSnapshotClassBlocks(vscSectionMatch[1]));
                 }
             }
             
@@ -4631,6 +5862,7 @@
             
             return {
                 storageClasses: clusterStorageClasses, // All storage classes from cluster context
+                volumeSnapshotClasses: clusterVolumeSnapshotClasses,
                 arrays: usedArrays,
                 ports: usedPorts
             };
@@ -4650,6 +5882,7 @@
             // Get cluster-specific storage resources first (needed for port filtering)
             const clusterResources = getClusterStorageResources(state.currentCluster);
             const filteredStorageClasses = clusterResources.storageClasses;
+            const filteredVolumeSnapshotClasses = clusterResources.volumeSnapshotClasses;
             const clusterArrays = clusterResources.arrays;
             const clusterPorts = clusterResources.ports;
             
@@ -4669,16 +5902,49 @@
                 ? Object.fromEntries(Object.entries(state.config.arrays).filter(([_, array]) => configBelongsToCluster(array)))
                 : state.config.arrays;
             
-            const hostCount = Object.keys(filteredHosts).length;
+            // Deduplicate hosts by Kubernetes node — each node can have multiple WWPNs/WWNNs
+            const nodeGroups = {};
+            for (const host of Object.values(filteredHosts)) {
+                if (!host.wwpn) continue;
+                const groupKey = getHostGroupKey(host);
+                if (!nodeGroups[groupKey]) {
+                    const nodeId = resolveHostNodeId(host);
+                    nodeGroups[groupKey] = {
+                        nodeId: nodeId && nodeId !== 'unknown' ? nodeId : getHostGroupDisplayName(groupKey, { nodeId }),
+                        wwpns: new Set(),
+                        wwnns: new Set(),
+                        pods: new Set(),
+                        errors: 0,
+                        warnings: 0
+                    };
+                }
+                if (host.wwpn) nodeGroups[groupKey].wwpns.add(host.wwpn);
+                if (host.wwnn) nodeGroups[groupKey].wwnns.add(host.wwnn);
+                if (host.nodes) host.nodes.forEach(n => nodeGroups[groupKey].pods.add(n));
+                nodeGroups[groupKey].errors += (host.errors || 0);
+                nodeGroups[groupKey].warnings += (host.warnings || 0);
+            }
+            const wwnNodeCount = Object.keys(nodeGroups).length;
+            const csiNodePodCount = countCsiNodePods(state.currentCluster);
+            const hostCount = wwnNodeCount;
+
+            // Multipath data for current cluster
+            const mpCluster = state.currentCluster || Object.keys(state.multipath)[0] || null;
+            const mpNodes = mpCluster ? (state.multipath[mpCluster] || {}) :
+                Object.values(state.multipath).reduce((acc, nodes) => Object.assign(acc, nodes), {});
+            const multipathNodeCount = Object.keys(mpNodes).length;
             const volumeCount = Object.keys(filteredVolumes).length;
             const storageClassCount = filteredStorageClasses.length;
+            const volumeSnapshotClassCount = filteredVolumeSnapshotClasses.length;
             
             // Build ports from storage classes (will be used for count and table)
             const portsInfo = new Map();
             
             if (filteredStorageClasses && filteredStorageClasses.length > 0) {
                 filteredStorageClasses.forEach(sc => {
-                    const serial = sc.parameters && sc.parameters.serialNumber ? sc.parameters.serialNumber.trim() : null;
+                    const serial = sc.parameters && sc.parameters.serialNumber
+                        ? normalizeArraySerial(sc.parameters.serialNumber.trim())
+                        : null;
                     if (!serial) return;
                     
                     // Collect ports from this storage class and create entries
@@ -4721,15 +5987,14 @@
             if (filteredStorageClasses && filteredStorageClasses.length > 0) {
                 filteredStorageClasses.forEach(sc => {
                     if (sc.parameters && sc.parameters.serialNumber) {
-                        arraysFromSC.add(sc.parameters.serialNumber.trim());
+                        arraysFromSC.add(normalizeArraySerial(sc.parameters.serialNumber.trim()));
                     }
                 });
             }
-            
-            // Array count is now based ONLY on storage classes
+            // Array count is based on storage classes (VSCs link via storageclass-ref label)
             const arrayCount = arraysFromSC.size;
 
-            if (hostCount === 0 && volumeCount === 0 && arrayCount === 0 && storageClassCount === 0) {
+            if (hostCount === 0 && volumeCount === 0 && arrayCount === 0 && storageClassCount === 0 && volumeSnapshotClassCount === 0) {
                 configContent.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">📋</div>
@@ -4792,9 +6057,14 @@
                         <div class="config-card-title">Storage Classes</div>
                         <div class="config-card-value">${storageClassCount}</div>
                     </div>
-                    <div class="config-card clickable-card" onclick="scrollToSection('hosts-wwns-section')" title="Click to view Hosts & WWNs">
-                        <div class="config-card-title">Total Hosts (WWNs)</div>
-                        <div class="config-card-value">${hostCount}</div>
+                    <div class="config-card clickable-card" onclick="scrollToSection('volume-snapshot-classes-section')" title="Click to view Volume Snapshot Classes">
+                        <div class="config-card-title">Volume Snapshot Classes</div>
+                        <div class="config-card-value">${volumeSnapshotClassCount}</div>
+                    </div>
+                    <div class="config-card clickable-card" onclick="scrollToSection('hosts-wwns-section')" title="Nodes with host WWN data found in collected CSI node driver logs${csiNodePodCount > wwnNodeCount ? ' (' + wwnNodeCount + ' of ' + csiNodePodCount + ' CSI node pods)' : ''}">
+                        <div class="config-card-title">Nodes w/ WWN in Logs</div>
+                        <div class="config-card-value">${wwnNodeCount}</div>
+                        ${csiNodePodCount > wwnNodeCount ? `<div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; font-weight: normal;">of ${csiNodePodCount} CSI node pods</div>` : ''}
                     </div>
                     <div class="config-card clickable-card" onclick="scrollToSection('volumes-section')" title="Click to view Volumes & LUN Mappings">
                         <div class="config-card-title">Total Volumes</div>
@@ -4804,37 +6074,41 @@
                         <div class="config-card-title">Storage Ports Used</div>
                         <div class="config-card-value">${portCount}</div>
                     </div>
+                    <div class="config-card ${multipathNodeCount > 0 ? 'clickable-card' : ''}" ${multipathNodeCount > 0 ? "onclick=\"scrollToSection('hosts-wwns-section')\"" : ''} title="${multipathNodeCount > 0 ? 'Click to view Multipath configurations' : 'Multipath collected by default; use --no-multipath to skip'}">
+                        <div class="config-card-title">Multipath Configs</div>
+                        <div class="config-card-value" style="${multipathNodeCount === 0 ? 'color: var(--text-secondary); font-size: 16px;' : ''}">${multipathNodeCount > 0 ? multipathNodeCount : '—'}</div>
+                    </div>
                 </div>
             `;
 
-            // Storage Arrays Table (from storage classes ONLY)
+            // Storage Arrays Table (from storage classes and volume snapshot classes)
             if (arrayCount > 0) {
-                // Build array info ONLY from storage classes (definitive source)
                 const arraysInfo = new Map();
+                
+                function ensureArrayInfo(serial) {
+                    if (!arraysInfo.has(serial)) {
+                        arraysInfo.set(serial, {
+                            serial: serial,
+                            storageClasses: [],
+                            volumeSnapshotClasses: [],
+                            ports: new Set(),
+                            errors: 0,
+                            warnings: 0
+                        });
+                    }
+                    return arraysInfo.get(serial);
+                }
                 
                 if (filteredStorageClasses && filteredStorageClasses.length > 0) {
                     filteredStorageClasses.forEach(sc => {
                         const serial = sc.parameters && sc.parameters.serialNumber ? sc.parameters.serialNumber.trim() : null;
                         if (!serial) return;
                         
-                        // Get or create array entry
-                        if (!arraysInfo.has(serial)) {
-                            arraysInfo.set(serial, {
-                                serial: serial,
-                                storageClasses: [],
-                                ports: new Set(),
-                                errors: 0,
-                                warnings: 0
-                            });
-                        }
-                        
-                        const info = arraysInfo.get(serial);
-                        // Add storage class name if not already in the list
+                        const info = ensureArrayInfo(serial);
                         if (!info.storageClasses.includes(sc.name)) {
                             info.storageClasses.push(sc.name);
                         }
                         
-                        // Collect ports from this storage class
                         if (sc.parameters) {
                             if (sc.parameters.portID) {
                                 sc.parameters.portID.split(',').forEach(p => info.ports.add(p.trim()));
@@ -4849,8 +6123,23 @@
                     });
                 }
                 
-                // No need to merge with log data or filter - we only use storage classes
-                // arraysInfo now contains all arrays from storage classes for this cluster
+                if (filteredVolumeSnapshotClasses && filteredVolumeSnapshotClasses.length > 0) {
+                    filteredVolumeSnapshotClasses.forEach(vsc => {
+                        let serial = null;
+                        if (vsc.storageClassRef && filteredStorageClasses.length > 0) {
+                            const linkedSc = filteredStorageClasses.find(sc => sc.name === vsc.storageClassRef);
+                            if (linkedSc && linkedSc.parameters && linkedSc.parameters.serialNumber) {
+                                serial = linkedSc.parameters.serialNumber.trim();
+                            }
+                        }
+                        if (!serial) return;
+                        
+                        const info = ensureArrayInfo(serial);
+                        if (!info.volumeSnapshotClasses.includes(vsc.name)) {
+                            info.volumeSnapshotClasses.push(vsc.name);
+                        }
+                    });
+                }
                 
                 html += `
                     <div id="storage-arrays-section" class="config-section">
@@ -4862,7 +6151,7 @@
                             <thead>
                                 <tr>
                                     <th>Serial Number</th>
-                                    <th>Storage Classes</th>
+                                    <th>Storage / Snapshot Classes</th>
                                     <th>Ports</th>
                                     <th>Status</th>
                                 </tr>
@@ -4882,12 +6171,19 @@
                     if (!statusBadges) statusBadges = '<span style="color: var(--success-green);">✓ OK</span>';
 
                     const ports = Array.from(array.ports).sort().join(', ');
-                    const scList = array.storageClasses.join(', ');
+                    let classCell = array.storageClasses.join(', ') || '';
+                    if (array.volumeSnapshotClasses.length > 0) {
+                        const vscPart = array.volumeSnapshotClasses.join(', ');
+                        classCell += classCell
+                            ? `<br><span style="font-size: 10px;">Snap: ${vscPart}</span>`
+                            : `<span style="font-size: 10px;">Snap: ${vscPart}</span>`;
+                    }
+                    if (!classCell) classCell = '-';
                     
                     html += `
                         <tr class="${rowClass}">
                             <td><span class="array-serial">${array.serial}</span></td>
-                            <td style="font-size: 11px; color: var(--text-secondary);">${scList || '-'}</td>
+                            <td style="font-size: 11px; color: var(--text-secondary);">${classCell}</td>
                             <td style="font-size: 11px;">${ports}</td>
                             <td>${statusBadges}</td>
                         </tr>
@@ -4904,58 +6200,77 @@
 
             // Hosts & WWNs Table
             if (hostCount > 0) {
+                const clusterPrefix = state.currentCluster ? state.currentCluster + '/' : null;
+                const sortedNodes = Object.values(nodeGroups).sort((a, b) => a.nodeId.localeCompare(b.nodeId));
+                let nodeRowIndex = 0;
+
                 html += `
                     <div id="hosts-wwns-section" class="config-section">
                         <div class="config-section-header">
-                            <span>🔌 Hosts & WWNs</span>
-                            <span class="config-section-count">${hostCount} hosts</span>
+                            <span>🔌 Hosts, WWNs, Multipath</span>
+                            <span class="config-section-count">${wwnNodeCount} node${wwnNodeCount !== 1 ? 's' : ''} w/ WWN in logs${csiNodePodCount > wwnNodeCount ? ' (' + csiNodePodCount + ' CSI node pods total)' : ''}</span>
                         </div>
                         <table class="config-table">
                             <thead>
                                 <tr>
-                                    <th>Host Number</th>
-                                    <th>WWPN</th>
-                                    <th>WWNN</th>
                                     <th>Kubernetes Node</th>
-                                    <th>Pod</th>
-                                    <th>Status</th>
+                                    <th>WWPN(s)</th>
+                                    <th>WWNN(s)</th>
+                                    <th>Pod(s)</th>
+                                    <th>Multipath</th>
                                 </tr>
                             </thead>
                             <tbody>
                 `;
 
-                const sortedHosts = Object.values(filteredHosts).sort((a, b) => 
-                    parseInt(a.hostNumber) - parseInt(b.hostNumber)
-                );
+                for (const node of sortedNodes) {
+                    const rowClass = node.errors > 0 ? 'row-with-error' : (node.warnings > 0 ? 'row-with-warning' : '');
+                    const displayPods = Array.from(node.pods).map(pod =>
+                        clusterPrefix && pod && pod.startsWith(clusterPrefix) ? pod.substring(clusterPrefix.length) : pod
+                    ).join(', ');
+                    const wwpnList = Array.from(node.wwpns).map(w => `<span class="wwn-code">${w}</span>`).join('<br>');
+                    const wwnnList = Array.from(node.wwnns).map(w => `<span class="wwn-code">${w}</span>`).join('<br>');
 
-                for (const host of sortedHosts) {
-                    // Remove cluster prefix from pod names for display (consistent with other views)
-                    const clusterPrefix = state.currentCluster ? state.currentCluster + '/' : null;
-                    const displayPods = Array.from(host.nodes).map(pod => {
-                        if (clusterPrefix && pod && typeof pod === 'string' && pod.startsWith(clusterPrefix)) {
-                            return pod.substring(clusterPrefix.length);
-                        }
-                        return pod;
-                    });
-                    const pods = displayPods.join(', ');
-                    const nodeName = host.nodeId || '-';
-                    const rowClass = host.errors > 0 ? 'row-with-error' : (host.warnings > 0 ? 'row-with-warning' : '');
-                    
-                    let statusBadges = '';
-                    if (host.errors > 0) statusBadges += `<span class="issue-badge error-badge">${host.errors} ERROR${host.errors > 1 ? 'S' : ''}</span>`;
-                    if (host.warnings > 0) statusBadges += `<span class="issue-badge warning-badge">${host.warnings} WARNING${host.warnings > 1 ? 'S' : ''}</span>`;
-                    if (!statusBadges) statusBadges = '<span style="color: var(--text-secondary); font-size: 11px;">OK</span>';
-
-                    html += `
-                        <tr class="${rowClass}">
-                            <td><strong>${host.hostNumber}</strong></td>
-                            <td><span class="wwn-code">${host.wwpn}</span></td>
-                            <td><span class="wwn-code">${host.wwnn}</span></td>
-                            <td>${nodeName !== '-' ? `<span class="node-badge">${nodeName}</span>` : '-'}</td>
-                            <td style="font-size: 11px; color: var(--text-secondary);">${pods}</td>
-                            <td>${statusBadges}</td>
-                        </tr>
-                    `;
+                    const mpContent = lookupMultipathContent(node.nodeId, mpNodes);
+                    let mpCell;
+                    if (mpContent) {
+                        const confMatch = mpContent.match(/=== \/etc\/multipath\.conf ===([\s\S]*?)(?==== multipath -ll ===|$)/);
+                        const llMatch = mpContent.match(/=== multipath -ll ===([\s\S]*?)$/);
+                        const confText = confMatch ? confMatch[1].trim() : '';
+                        const llText = llMatch ? llMatch[1].trim() : '';
+                        const detailId = 'mp-detail-' + nodeRowIndex;
+                        mpCell = `<span class="issue-badge" style="background: var(--accent-blue); color: #fff; cursor: default;">Found</span>
+                            <button class="copy-section-btn" style="margin-left: 6px;" onclick="(function(id){var el=document.getElementById(id);el.style.display=el.style.display==='none'?'table-row':'none';}('${detailId}'))">View</button>`;
+                        html += `
+                            <tr class="${rowClass}">
+                                <td><span class="node-badge">${escapeHtml(node.nodeId)}</span></td>
+                                <td>${wwpnList || '-'}</td>
+                                <td>${wwnnList || '-'}</td>
+                                <td style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(displayPods)}</td>
+                                <td style="white-space: nowrap;">${mpCell}</td>
+                            </tr>
+                            <tr id="${detailId}" style="display:none;">
+                                <td colspan="5" style="padding: 0; background: var(--bg-primary);">
+                                    <div style="padding: 0; border-top: 1px solid var(--border-color);">
+                                        <div style="padding: 6px 14px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);">/etc/multipath.conf</div>
+                                        <pre style="margin: 0; padding: 10px 14px; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow-y: auto;">${confText ? escapeHtml(confText) : '<span style="color:var(--text-secondary);font-style:italic;">(not found)</span>'}</pre>
+                                        <div style="padding: 6px 14px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">multipath -ll</div>
+                                        <pre style="margin: 0; padding: 10px 14px; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow-y: auto;">${llText ? escapeHtml(llText) : '<span style="color:var(--text-secondary);font-style:italic;">(not available)</span>'}</pre>
+                                    </div>
+                                </td>
+                            </tr>`;
+                    } else {
+                        mpCell = `<span style="color: var(--text-secondary); font-size: 11px;">—</span>`;
+                        html += `
+                            <tr class="${rowClass}">
+                                <td><span class="node-badge">${escapeHtml(node.nodeId)}</span></td>
+                                <td>${wwpnList || '-'}</td>
+                                <td>${wwnnList || '-'}</td>
+                                <td style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(displayPods)}</td>
+                                <td>${mpCell}</td>
+                            </tr>`;
+                    }
+                    nodeRowIndex++;
                 }
 
                 html += `
@@ -4967,14 +6282,25 @@
             
             // Storage Classes (from cluster-context) - use filtered storage classes
             html += renderStorageClassesSection(filteredStorageClasses);
+            html += renderVolumeSnapshotClassesSection(filteredVolumeSnapshotClasses);
 
             // Volumes & LUNs Table
             if (volumeCount > 0) {
                 html += `
                     <div id="volumes-section" class="config-section">
-                        <div class="config-section-header">
-                            <span>💾 Volumes & LUN Mappings</span>
-                            <span class="config-section-count">${volumeCount} volumes</span>
+                        <div class="config-section-header config-section-header-with-search">
+                            <div class="config-section-title-group">
+                                <span>💾 Volumes & LUN Mappings</span>
+                                <div class="config-section-toolbar config-section-toolbar-left">
+                                    <label class="config-search-label" for="volumeSearchInput">Filter</label>
+                                    <div class="config-search-box search-box">
+                                        <span class="config-search-icon" aria-hidden="true">⌕</span>
+                                        <input type="text" id="volumeSearchInput" placeholder="LDEV, nickname, LUN, WWN, node…" autocomplete="off">
+                                        <span class="search-clear" id="volumeSearchClear" title="Clear search">✕</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="config-section-count" id="volumeSearchCount">${volumeCount} volume${volumeCount !== 1 ? 's' : ''}</span>
                         </div>
                         <table class="config-table">
                             <thead>
@@ -4984,7 +6310,8 @@
                                     <th>Array</th>
                                     <th>Size</th>
                                     <th>Ports</th>
-                                    <th>LUN Mappings</th>
+                                    <th>LUN Mappings (by Host)</th>
+                                    <th>Nodes</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
@@ -4994,51 +6321,39 @@
                 const sortedVolumes = Object.values(filteredVolumes).sort((a, b) => 
                     parseInt(a.ldevId) - parseInt(b.ldevId)
                 );
+                const wwpnToHost = buildWwpnToHostLookup(filteredHosts);
 
                 for (const vol of sortedVolumes) {
                     const rowClass = vol.errors > 0 ? 'row-with-error' : (vol.warnings > 0 ? 'row-with-warning' : '');
-                    const portsHtml = vol.ports.map(p => `<span class="port-badge">${p}</span>`).join(' ');
+                    const uniquePorts = [...new Set(vol.ports || [])];
+                    const portsHtml = uniquePorts.map(p => `<span class="port-badge">${p}</span>`).join(' ');
                     
                     let statusBadges = '';
                     if (vol.errors > 0) statusBadges += `<span class="issue-badge error-badge">${vol.errors} ERROR${vol.errors > 1 ? 'S' : ''}</span>`;
                     if (vol.warnings > 0) statusBadges += `<span class="issue-badge warning-badge">${vol.warnings} WARNING${vol.warnings > 1 ? 'S' : ''}</span>`;
                     if (!statusBadges) statusBadges = '<span style="color: var(--text-secondary); font-size: 11px;">OK</span>';
 
-                    // Group LUNs by WWPN
-                    const lunsByWwpn = {};
-                    for (const mapping of vol.mappings) {
-                        if (!lunsByWwpn[mapping.identifier]) {
-                            lunsByWwpn[mapping.identifier] = [];
-                        }
-                        if (!lunsByWwpn[mapping.identifier].includes(mapping.lun)) {
-                            lunsByWwpn[mapping.identifier].push(mapping.lun);
-                        }
-                    }
+                    const lunsHtml = renderVolumeLunMappingsHtml(vol.mappings, wwpnToHost) || '-';
 
-                    let lunsHtml = '';
-                    for (const [wwpn, luns] of Object.entries(lunsByWwpn)) {
-                        const shortWwpn = wwpn.substring(wwpn.length - 8);
-                        lunsHtml += `<div style="margin: 2px 0;">
-                            <span style="color: var(--text-secondary); font-size: 10px;">${shortWwpn}:</span> `;
-                        for (const lun of luns) {
-                            lunsHtml += `<span class="lun-badge">${lun}</span>`;
-                        }
-                        lunsHtml += '</div>';
-                    }
-
-                    const arrayShort = vol.arraySerial.substring(vol.arraySerial.length - 6);
+                    const arraySerial = vol.arraySerial || extractArraySerialFromVolumeId(vol.volumeId);
+                    const arrayShort = arraySerial !== 'Unknown'
+                        ? arraySerial.substring(Math.max(0, arraySerial.length - 6))
+                        : '-';
+                    const nodeCount = vol.nodes ? vol.nodes.size : 0;
+                    const volumeSearchText = buildVolumeSearchText(vol, wwpnToHost);
 
                     html += `
-                        <tr class="${rowClass}">
+                        <tr class="volume-table-row ${rowClass}" data-volume-search="${escapeHtml(volumeSearchText)}">
                             <td>
                                 <span class="ldev-id">${vol.ldevId}</span>
-                                <br><span style="font-size: 10px; color: var(--text-secondary);">${vol.ldevHex}</span>
+                                <br><span style="font-size: 10px; color: var(--text-secondary);">${vol.ldevHex || '-'}</span>
                             </td>
                             <td><span class="volume-nickname">${vol.nickname || '-'}</span></td>
-                            <td style="font-size: 10px; color: var(--text-secondary);">...${arrayShort}</td>
-                            <td><strong>${vol.size}</strong></td>
+                            <td style="font-size: 10px; color: var(--text-secondary);">${arrayShort}</td>
+                            <td><strong>${vol.size || '-'}</strong></td>
                             <td>${portsHtml || '-'}</td>
                             <td>${lunsHtml || '-'}</td>
+                            <td style="font-size: 11px; text-align: center;">${nodeCount || '-'}</td>
                             <td>${statusBadges}</td>
                         </tr>
                     `;
@@ -5047,64 +6362,26 @@
                 html += `
                             </tbody>
                         </table>
+                        <div id="volumeSearchEmpty" class="volume-search-empty" style="display: none;">
+                            No volumes match your search.
+                        </div>
                     </div>
                 `;
             }
-
-            // Port Usage Summary - build from storage classes (source of truth)
-            // portsInfo was already built above for the count, now enrich with log data
-            if (portsInfo.size > 0) {
-                filteredStorageClasses.forEach(sc => {
-                    const serial = sc.parameters && sc.parameters.serialNumber ? sc.parameters.serialNumber.trim() : null;
-                    if (!serial) return;
-                    
-                    // Collect ports from this storage class and create entries
-                    if (sc.parameters) {
-                        const portParams = [];
-                        if (sc.parameters.portID) {
-                            portParams.push(...sc.parameters.portID.split(',').map(p => p.trim()));
-                        }
-                        if (sc.parameters.primaryPortID) {
-                            portParams.push(...sc.parameters.primaryPortID.split(',').map(p => p.trim()));
-                        }
-                        if (sc.parameters.secondaryPortID) {
-                            portParams.push(...sc.parameters.secondaryPortID.split(',').map(p => p.trim()));
-                        }
-                        
-                        // Create port entries with composite keys (port:arraySerial)
-                        for (const portName of portParams) {
-                            if (!portName) continue;
-                            const portKey = `${portName}:${serial}`;
-                            
-                            if (!portsInfo.has(portKey)) {
-                                portsInfo.set(portKey, {
-                                    name: portName,
-                                    arraySerial: serial,
-                                    volumes: new Set(),
-                                    errors: 0,
-                                    warnings: 0
-                                });
-                            }
-                        }
-                    }
-                });
-            }
-            
-            // Enrich port entries with data from logs (volumes, errors, warnings)
             for (const [portKey, portInfo] of portsInfo.entries()) {
-                // Find matching port in filteredPorts (from logs) to get volume and error data
-                const logPort = filteredPorts[portKey];
+                const logPort = filteredPorts[portKey] || filteredPorts[`${portInfo.name}:${normalizeArraySerial(portInfo.arraySerial)}`];
                 if (logPort) {
-                    // Merge volume data
                     if (logPort.volumes && logPort.volumes instanceof Set) {
                         for (const volId of logPort.volumes) {
                             portInfo.volumes.add(volId);
                         }
                     }
-                    // Merge error/warning counts
                     portInfo.errors += logPort.errors || 0;
                     portInfo.warnings += logPort.warnings || 0;
                 }
+            }
+            for (const vol of Object.values(filteredVolumes)) {
+                attachVolumeToPortUsage(portsInfo, vol);
             }
             
             if (portsInfo.size > 0) {
@@ -5162,9 +6439,30 @@
             
             html += '</div>';
             configContent.innerHTML = html;
+            setupVolumeSearch();
+            setupConfigYamlButtons();
+        }
+
+        function setupConfigYamlButtons() {
+            document.querySelectorAll('#configContent .config-yaml-btn').forEach(btn => {
+                btn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const kind = btn.getAttribute('data-yaml-kind');
+                    const name = btn.getAttribute('data-yaml-name');
+                    if (kind && name) {
+                        showConfigResourceYAML(kind, name);
+                    }
+                });
+            });
         }
         
         // Render Storage Classes section (extracted for reuse)
+        function renderConfigYamlButton(kind, resourceName, yaml) {
+            if (!resourceName || !yaml) return '<span style="color: var(--text-secondary); font-size: 11px;">—</span>';
+            return `<button type="button" class="copy-section-btn config-yaml-btn" data-yaml-kind="${escapeHtml(kind)}" data-yaml-name="${escapeHtml(resourceName)}" title="View ${escapeHtml(kind)} YAML">YAML</button>`;
+        }
+
         function renderStorageClassesSection(filteredStorageClasses = null) {
             // Use provided filtered storage classes, or fall back to all if not provided
             const storageClassesToRender = filteredStorageClasses || state.config.storageClasses || [];
@@ -5192,6 +6490,7 @@
                                     <th>Ports</th>
                                     <th>Connection</th>
                                     <th>Details</th>
+                                    <th style="width: 64px;">YAML</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -5218,6 +6517,7 @@
                             <td style="font-size: 11px; color: var(--text-secondary);">
                                 FS: ${fsType} • Efficiency: ${efficiency} • Reclaim: ${reclaim} • Expansion: ${expansion}
                             </td>
+                            <td>${renderConfigYamlButton('StorageClass', sc.name, sc.yaml)}</td>
                         </tr>
                     `;
                 }
@@ -5249,6 +6549,7 @@
                                     <th>Secondary Ports</th>
                                     <th>Quorum</th>
                                     <th>Details</th>
+                                    <th style="width: 64px;">YAML</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -5285,6 +6586,7 @@
                             <td style="font-size: 11px; color: var(--text-secondary);">
                                 Connection: <span class="port-badge">${connType.toUpperCase()}</span> • Reclaim: ${reclaim} • Expansion: ${expansion}
                             </td>
+                            <td>${renderConfigYamlButton('StorageClass', sc.name, sc.yaml)}</td>
                         </tr>
                     `;
                 }
@@ -5296,6 +6598,67 @@
                 `;
             }
             
+            return html;
+        }
+
+        function renderVolumeSnapshotClassesSection(filteredVolumeSnapshotClasses = null) {
+            const classesToRender = filteredVolumeSnapshotClasses || state.config.volumeSnapshotClasses || [];
+            if (classesToRender.length === 0) return '';
+
+            let html = `
+                <div id="volume-snapshot-classes-section" class="config-section">
+                    <div class="config-section-header">
+                        <span>📸 VolumeSnapshotClasses</span>
+                        <span class="config-section-count">${classesToRender.length} volumeSnapshotClass(es)</span>
+                    </div>
+                    <table class="config-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Storage Class</th>
+                                <th>Pool</th>
+                                <th>Snapshotter Secret</th>
+                                <th>Deletion Policy</th>
+                                <th>Description</th>
+                                <th style="width: 64px;">YAML</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            for (const vsc of classesToRender) {
+                const poolId = vsc.parameters.poolID || '-';
+                const secretNs = vsc.parameters['csi.storage.k8s.io/snapshotter-secret-namespace'] || '';
+                const secretName = vsc.parameters['csi.storage.k8s.io/snapshotter-secret-name'] || '';
+                const secretCell = secretNs && secretName
+                    ? `${secretNs}/${secretName}`
+                    : (secretName || secretNs || '-');
+                const scRef = vsc.storageClassRef || '-';
+                const deletion = vsc.deletionPolicy || '-';
+                const veleroBadge = vsc.isVelero
+                    ? '<span style="background: var(--accent-blue); color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: 600; margin-left: 6px;">VELERO</span>'
+                    : '';
+                const description = vsc.description || '-';
+
+                html += `
+                    <tr>
+                        <td><strong>${vsc.name}</strong>${veleroBadge}</td>
+                        <td style="font-size: 11px;">${scRef}</td>
+                        <td>${poolId}</td>
+                        <td style="font-size: 11px;">${secretCell}</td>
+                        <td>${deletion}</td>
+                        <td style="font-size: 11px; color: var(--text-secondary);">${description}</td>
+                        <td>${renderConfigYamlButton('VolumeSnapshotClass', vsc.name, vsc.yaml)}</td>
+                    </tr>
+                `;
+            }
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
             return html;
         }
 
@@ -5955,59 +7318,135 @@
 
         function renderClusterInfo() {
             let html = '';
-            
-            // Handle both old format (string) and new format (object with cluster keys)
-            if (typeof state.clusterContext === 'string') {
-                // Old format - single cluster
-                const sections = parseClusterSections(state.clusterContext);
-                const filteredSections = sections.filter(s => s.title !== 'Recent Events');
-                html += filteredSections.map((section, index) => `
-                    <div class="context-section">
-                        <div class="context-header">
-                            <span onclick="toggleSection(${index})" style="cursor: pointer; flex: 1;">${section.title}</span>
+            let sectionIndex = 0;
+
+            // Known top-level section titles written by the collection scripts.
+            // Used to detect when pod sub-sections end and a real section begins.
+            const KNOWN_SECTION_TITLES = new Set([
+                'Log Collection Script Version', 'Cluster Version', 'Orchestration Platform',
+                'Node OS & Runtime Information', 'HSPC CR',
+                'Deployments', 'All Deployments', 'DaemonSets', 'All DaemonSets',
+                'ReplicaSets', 'All ReplicaSets', 'HSPC StorageClasses', 'HSPC VolumeSnapshotClasses', 'HSPC Versions',
+                'DR Operator and HRPC Versions', 'Pod Ownership Chain', 'Pod Descriptions',
+                'Recent Events', 'LocalVolumes', 'RemoteVolumes', 'Replications',
+                'DRPolicies', 'ReplicationGroups', 'Note', 'HRPC Replication Operator Deployments'
+            ]);
+
+            // Build a single collapsed section element.
+            // lastItem=true sets margin-bottom: 0 so the last nested section sits flush
+            // against its parent's border with no extra gap.
+            function buildSection(idx, title, contentHtml, showCopy, lastItem) {
+                const copyBtn = showCopy
+                    ? `<button class="copy-section-btn" onclick="copySectionContent(${idx}, event)" title="Copy to clipboard">📋 Copy</button>`
+                    : '';
+                const outerStyle = lastItem ? ' style="margin-bottom: 0;"' : '';
+                return `
+                    <div class="context-section"${outerStyle}>
+                        <div class="context-header" onclick="toggleSection(${idx})" style="cursor: pointer;">
+                            <span style="flex: 1;">${title}</span>
                             <div class="context-header-controls">
-                                <button class="copy-section-btn" onclick="copySectionContent(${index}, event)" title="Copy to clipboard">📋 Copy</button>
-                                <span class="toggle-icon" id="toggle-${index}" onclick="toggleSection(${index})" style="cursor: pointer;">▼</span>
+                                ${copyBtn}
+                                <span class="toggle-icon collapsed" id="toggle-${idx}">▼</span>
                             </div>
                         </div>
-                        <div class="context-content" id="content-${index}">${escapeHtml(section.content)}</div>
-                    </div>
-                `).join('');
+                        <div class="context-content collapsed" id="content-${idx}">${contentHtml}</div>
+                    </div>`;
+            }
+
+            // Render a filtered sections array with pod-grouping and optional multipath.
+            function renderSectionsList(sections, clusterName) {
+                let out = '';
+                let i = 0;
+                while (i < sections.length) {
+                    const section = sections[i];
+
+                    // "Pod Descriptions" from the script has no content of its own;
+                    // individual pod names follow as separate === sections until the
+                    // next known top-level section.
+                    if (section.title === 'Pod Descriptions' && !section.content.trim()) {
+                        const podSections = [];
+                        let j = i + 1;
+                        while (j < sections.length && !KNOWN_SECTION_TITLES.has(sections[j].title)) {
+                            podSections.push(sections[j]);
+                            j++;
+                        }
+                        if (podSections.length > 0) {
+                            const parentIdx = sectionIndex++;
+                            let podsHtml = '';
+                            for (let k = 0; k < podSections.length; k++) {
+                                const pod = podSections[k];
+                                const podIdx = sectionIndex++;
+                                // Last item has no bottom margin so it sits flush against the parent border
+                                podsHtml += buildSection(podIdx, escapeHtml(pod.title), escapeHtml(pod.content), true, k === podSections.length - 1);
+                            }
+                            // Parent: collapsed by default; inner sections expand inside it.
+                            out += `
+                                <div class="context-section">
+                                    <div class="context-header" onclick="toggleSection(${parentIdx})" style="cursor: pointer;">
+                                        <span style="flex: 1;">Pod Descriptions (${podSections.length})</span>
+                                        <div class="context-header-controls">
+                                            <span class="toggle-icon collapsed" id="toggle-${parentIdx}">▼</span>
+                                        </div>
+                                    </div>
+                                    <div class="context-content collapsed" id="content-${parentIdx}" style="max-height: none; overflow: visible; padding: 0; background: transparent; white-space: normal;">${podsHtml}</div>
+                                </div>`;
+                            i = j;
+                            continue;
+                        }
+                    }
+
+                    // Normal section — collapsed by default.
+                    const idx = sectionIndex++;
+                    out += buildSection(idx, escapeHtml(section.title), escapeHtml(section.content), true);
+                    i++;
+                }
+
+                // Multipath section for this cluster (matches standard section style exactly).
+                if (clusterName) {
+                    const mpData = state.multipath[clusterName];
+                    if (mpData && Object.keys(mpData).length > 0) {
+                        const mpParentIdx = sectionIndex++;
+                        let mpNodesHtml = '';
+                        const mpEntries = Object.entries(mpData).sort(([a], [b]) => a.localeCompare(b));
+                        mpEntries.forEach(([nodeName, content], k) => {
+                            const nodeIdx = sectionIndex++;
+                            mpNodesHtml += buildSection(nodeIdx, escapeHtml(nodeName), escapeHtml(content.trim()), true, k === mpEntries.length - 1);
+                        });
+                        out += `
+                            <div class="context-section">
+                                <div class="context-header" onclick="toggleSection(${mpParentIdx})" style="cursor: pointer;">
+                                    <span style="flex: 1;">Multipath Configuration</span>
+                                    <div class="context-header-controls">
+                                        <span class="toggle-icon collapsed" id="toggle-${mpParentIdx}">▼</span>
+                                    </div>
+                                </div>
+                                <div class="context-content collapsed" id="content-${mpParentIdx}" style="max-height: none; overflow: visible; padding: 0; background: transparent; white-space: normal;">${mpNodesHtml}</div>
+                            </div>`;
+                    }
+                }
+
+                return out;
+            }
+
+            if (typeof state.clusterContext === 'string') {
+                const sections = parseClusterSections(state.clusterContext).filter(s => s.title !== 'Recent Events');
+                html += renderSectionsList(sections, null);
             } else if (typeof state.clusterContext === 'object' && state.clusterContext !== null) {
-                // New format - multiple clusters
-                let sectionIndex = 0;
                 let clustersToShow = [];
                 try {
-                    clustersToShow = state.currentCluster 
-                        ? [state.currentCluster]  // Show only selected cluster
-                        : Object.keys(state.clusterContext);  // Show all clusters
+                    clustersToShow = state.currentCluster
+                        ? [state.currentCluster]
+                        : Object.keys(state.clusterContext);
                 } catch (e) {
                     console.error('Error getting cluster keys:', e);
-                    clustersToShow = [];
                 }
-                
+
                 for (const clusterName of clustersToShow) {
                     const clusterContent = state.clusterContext[clusterName];
                     if (!clusterContent) continue;
-                    
                     html += `<div class="context-section" style="margin-bottom: 20px;"><h3 style="color: var(--accent-blue); margin-bottom: 10px;">Cluster: ${clusterName}</h3>`;
-                    const sections = parseClusterSections(clusterContent);
-                    const filteredSections = sections.filter(s => s.title !== 'Recent Events');
-                    html += filteredSections.map((section) => {
-                        const idx = sectionIndex++;
-                        return `
-                            <div class="context-section">
-                                <div class="context-header">
-                                    <span onclick="toggleSection(${idx})" style="cursor: pointer; flex: 1;">${section.title}</span>
-                                    <div class="context-header-controls">
-                                        <button class="copy-section-btn" onclick="copySectionContent(${idx}, event)" title="Copy to clipboard">📋 Copy</button>
-                                        <span class="toggle-icon" id="toggle-${idx}" onclick="toggleSection(${idx})" style="cursor: pointer;">▼</span>
-                                    </div>
-                                </div>
-                                <div class="context-content" id="content-${idx}">${escapeHtml(section.content)}</div>
-                            </div>
-                        `;
-                    }).join('');
+                    const sections = parseClusterSections(clusterContent).filter(s => s.title !== 'Recent Events');
+                    html += renderSectionsList(sections, clusterName);
                     html += `</div>`;
                 }
             }
@@ -7147,7 +8586,7 @@
                             const paramMatch = line.match(/^\s{2}(\S+):\s*(.+)$/);
                             if (paramMatch) {
                                 const key = paramMatch[1].trim();
-                                const value = paramMatch[2].trim().replace(/^"|"$/g, '');
+                                const value = paramMatch[2].trim().replace(/^["']|["']$/g, '');
                                 sc.parameters[key] = value;
                             }
                         }
@@ -7701,6 +9140,36 @@ ${escapeHtml(trimmedYAML)}
             return policyYAML.trim() || null;
         }
 
+        // Show YAML modal (shared by Configuration tab and DR Policies)
+        window.showYamlModal = function(title, yaml) {
+            const modal = document.getElementById('yamlModal');
+            const titleEl = document.getElementById('yamlModalTitle');
+            const content = document.getElementById('yamlModalContent');
+            if (!modal || !titleEl || !content) return;
+
+            titleEl.textContent = title;
+            content.textContent = yaml;
+            modal.classList.add('active');
+        };
+
+        window.showConfigResourceYAML = function(kind, name) {
+            const clusterResources = getClusterStorageResources(state.currentCluster);
+            let resource = null;
+            if (kind === 'StorageClass') {
+                resource = clusterResources.storageClasses.find(sc => sc.name === name);
+            } else if (kind === 'VolumeSnapshotClass') {
+                resource = clusterResources.volumeSnapshotClasses.find(vsc => vsc.name === name);
+            }
+
+            if (!resource || !resource.yaml) {
+                alert('Could not find YAML for this resource');
+                return;
+            }
+
+            const clusterLabel = state.currentCluster || 'cluster';
+            window.showYamlModal(`${kind}: ${name} (${clusterLabel})`, resource.yaml);
+        };
+
         // Show YAML modal
         window.showDRPolicyYAML = function(clusterName, policyName) {
             const yaml = extractDRPolicyYAML(clusterName, policyName);
@@ -7708,14 +9177,8 @@ ${escapeHtml(trimmedYAML)}
                 alert('Could not find YAML for this DRPolicy');
                 return;
             }
-            
-            const modal = document.getElementById('yamlModal');
-            const title = document.getElementById('yamlModalTitle');
-            const content = document.getElementById('yamlModalContent');
-            
-            title.textContent = `DRPolicy: ${policyName} (${clusterName})`;
-            content.textContent = yaml;
-            modal.classList.add('active');
+
+            showYamlModal(`DRPolicy: ${policyName} (${clusterName})`, yaml);
         };
 
         // Close YAML modal
@@ -7733,7 +9196,241 @@ ${escapeHtml(trimmedYAML)}
                         closeYamlModal();
                     }
                 });
+                document.addEventListener('keydown', function(event) {
+                    if (event.key === 'Escape' && modal.classList.contains('active')) {
+                        closeYamlModal();
+                    }
+                });
             }
+        }
+
+        const AI_STORAGE_KEY = 'hspc-viewer-ai-api-key';
+        const AI_STORAGE_URL = 'hspc-viewer-ai-api-url';
+        const AI_STORAGE_MODEL = 'hspc-viewer-ai-model';
+        const AI_ACTIVE_TAB_KEY = 'hspc-viewer-ai-active-tab';
+
+        function setupAIAnalysis() {
+            const apiKeyInput = document.getElementById('aiApiKey');
+            const apiUrlInput = document.getElementById('aiApiUrl');
+            const modelInput = document.getElementById('aiModel');
+            const rememberCheckbox = document.getElementById('aiRememberKey');
+            const analyzeBtn = document.getElementById('aiAnalyzeBtn');
+            const placeholder = document.getElementById('aiAnalysisPlaceholder');
+            const loadingEl = document.getElementById('aiAnalysisLoading');
+            const outputEl = document.getElementById('aiAnalysisOutput');
+            const errorEl = document.getElementById('aiAnalysisError');
+
+            if (!analyzeBtn || !outputEl) return;
+
+            try {
+                if (rememberCheckbox && rememberCheckbox.checked && localStorage.getItem(AI_STORAGE_KEY)) {
+                    if (apiKeyInput) apiKeyInput.value = localStorage.getItem(AI_STORAGE_KEY);
+                }
+                var savedUrl = localStorage.getItem(AI_STORAGE_URL);
+                if (apiUrlInput && savedUrl) apiUrlInput.value = savedUrl;
+                var savedModel = localStorage.getItem(AI_STORAGE_MODEL);
+                if (modelInput && savedModel) modelInput.value = savedModel;
+            } catch (e) {}
+
+            if (rememberCheckbox) {
+                rememberCheckbox.addEventListener('change', function() {
+                    if (!rememberCheckbox.checked) {
+                        try { localStorage.removeItem(AI_STORAGE_KEY); } catch (e) {}
+                    }
+                });
+            }
+
+            analyzeBtn.addEventListener('click', async function() {
+                var key = apiKeyInput ? apiKeyInput.value.trim() : '';
+                if (!key) {
+                    alert('Please enter an API key.');
+                    return;
+                }
+                if (Object.keys(state.logs).length === 0) {
+                    alert('Load a log bundle first.');
+                    return;
+                }
+
+                placeholder.classList.add('hidden');
+                outputEl.classList.add('hidden');
+                errorEl.classList.add('hidden');
+                loadingEl.classList.remove('hidden');
+
+                var payload = buildAnalysisPayload();
+                var payloadJson = JSON.stringify(payload, null, 2);
+                var payloadTokens = estimateTokens(payloadJson);
+                var analyzeHintEl = document.getElementById('aiAnalyzeHint');
+                if (analyzeHintEl) analyzeHintEl.textContent = 'Sending ' + formatTokenEstimate(payloadTokens) + ' to model…';
+                var opts = {};
+                if (apiUrlInput && apiUrlInput.value.trim()) opts.apiUrl = apiUrlInput.value.trim();
+                if (modelInput && modelInput.value.trim()) opts.model = modelInput.value.trim();
+
+                var result = await callAnalysisAPI(key, payload, opts);
+
+                loadingEl.classList.add('hidden');
+                if (analyzeHintEl) analyzeHintEl.textContent = result.ok ? 'Sent ' + formatTokenEstimate(payloadTokens) + ' to model.' : 'Analysis failed.';
+
+                if (result.ok) {
+                    try {
+                        if (rememberCheckbox && rememberCheckbox.checked && apiKeyInput) {
+                            localStorage.setItem(AI_STORAGE_KEY, apiKeyInput.value);
+                        }
+                        if (apiUrlInput && apiUrlInput.value) localStorage.setItem(AI_STORAGE_URL, apiUrlInput.value);
+                        if (modelInput && modelInput.value) localStorage.setItem(AI_STORAGE_MODEL, modelInput.value);
+                    } catch (e) {}
+                    renderAnalysisResult(result.result, outputEl);
+                    outputEl.classList.remove('hidden');
+                    setActiveTab('results');
+                } else {
+                    errorEl.textContent = result.error || 'Request failed';
+                    errorEl.classList.remove('hidden');
+                }
+            });
+
+            var chatMessages = document.getElementById('aiChatMessages');
+            var chatInput = document.getElementById('aiChatInput');
+            var chatSendBtn = document.getElementById('aiChatSendBtn');
+            var chatCopyBtn = document.getElementById('aiChatCopyBtn');
+            var chatSaveBtn = document.getElementById('aiChatSaveBtn');
+            var chatClearBtn = document.getElementById('aiChatClearBtn');
+            if (chatMessages && chatInput && chatSendBtn) {
+                function getChatTranscriptText() {
+                    if (!state.aiChatHistory || !state.aiChatHistory.length) return '';
+                    return state.aiChatHistory.map(function(msg) {
+                        var label = msg.role === 'user' ? '**You**' : '**Assistant**';
+                        return label + '\n\n' + msg.content;
+                    }).join('\n\n---\n\n');
+                }
+                function appendChatMessage(role, content) {
+                    var div = document.createElement('div');
+                    div.className = 'ai-chat-msg ' + role;
+                    var label = role === 'user' ? 'You' : 'Assistant';
+                    var bodyHtml = role === 'assistant' && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined'
+                        ? DOMPurify.sanitize(marked.parse(content))
+                        : escapeHtml(content);
+                    div.innerHTML = '<div class="ai-chat-msg-label">' + escapeHtml(label) + '</div><div class="ai-chat-msg-content">' + bodyHtml + '</div>';
+                    chatMessages.appendChild(div);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+                if (chatCopyBtn) {
+                    chatCopyBtn.addEventListener('click', function() {
+                        var text = getChatTranscriptText();
+                        if (!text) { return; }
+                        navigator.clipboard.writeText(text).then(function() {
+                            chatCopyBtn.textContent = 'Copied!';
+                            setTimeout(function() { chatCopyBtn.textContent = 'Copy'; }, 2000);
+                        }).catch(function() { alert('Copy failed.'); });
+                    });
+                }
+                if (chatSaveBtn) {
+                    chatSaveBtn.addEventListener('click', function() {
+                        var text = getChatTranscriptText();
+                        if (!text) { return; }
+                        var now = new Date();
+                        var stamp = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + '-' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+                        var base = state.bundleName || '';
+                        var slug = base.replace(/^.*[/\\]/, '').replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                        if (slug.length > 50) slug = slug.slice(0, 50);
+                        var filename = slug ? 'chat-transcript-' + slug + '-' + stamp + '.md' : 'chat-transcript-' + stamp + '.md';
+                        var blob = new Blob([text], { type: 'text/markdown' });
+                        var a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = filename;
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                    });
+                }
+                if (chatClearBtn) {
+                    chatClearBtn.addEventListener('click', function() {
+                        state.aiChatHistory = [];
+                        chatMessages.innerHTML = '';
+                    });
+                }
+                chatSendBtn.addEventListener('click', doSendChat);
+                chatInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSendChat(); }
+                });
+                async function doSendChat() {
+                    var text = chatInput.value.trim();
+                    if (!text) return;
+                    var key = apiKeyInput ? apiKeyInput.value.trim() : '';
+                    if (!key) { alert('Please enter an API key in the form above.'); return; }
+                    if (Object.keys(state.logs).length === 0) { alert('Load a log bundle first.'); return; }
+                    chatInput.value = '';
+                    chatSendBtn.disabled = true;
+                    setActiveTab('chat');
+                    appendChatMessage('user', text);
+                    appendChatMessage('assistant', 'Thinking…');
+                    var opts = {};
+                    if (apiUrlInput && apiUrlInput.value.trim()) opts.apiUrl = apiUrlInput.value.trim();
+                    if (modelInput && modelInput.value.trim()) opts.model = modelInput.value.trim();
+                    var result = await sendChatMessage(text, state.aiChatHistory, key, opts);
+                    chatMessages.removeChild(chatMessages.lastChild);
+                    var chatHintEl = document.querySelector('.ai-chat-hint');
+                    if (result.ok) {
+                        appendChatMessage('assistant', result.result);
+                        state.aiChatHistory.push({ role: 'user', content: text });
+                        state.aiChatHistory.push({ role: 'assistant', content: result.result });
+                        if (chatHintEl && result.excerptTokens != null) {
+                            chatHintEl.textContent = 'Last request sent ' + formatTokenEstimate(result.excerptTokens) + ' of log excerpts to the model.';
+                        }
+                    } else {
+                        appendChatMessage('assistant', 'Error: ' + (result.error || 'Request failed'));
+                        if (chatHintEl && result.excerptTokens != null) {
+                            chatHintEl.textContent = 'Last request sent ' + formatTokenEstimate(result.excerptTokens) + ' of log excerpts to the model.';
+                        }
+                    }
+                    chatSendBtn.disabled = Object.keys(state.logs).length === 0;
+                }
+            }
+
+            // AI tab switching
+            function setActiveTab(key) {
+                document.querySelectorAll('.ai-tab').forEach(function(btn) {
+                    btn.classList.toggle('active', btn.getAttribute('data-tab') === key);
+                });
+                document.querySelectorAll('.ai-tab-pane').forEach(function(pane) {
+                    pane.classList.toggle('active', pane.getAttribute('data-tab-pane') === key);
+                });
+                try { localStorage.setItem(AI_ACTIVE_TAB_KEY, key); } catch (e) {}
+            }
+            var savedTab = 'setup';
+            try { savedTab = localStorage.getItem(AI_ACTIVE_TAB_KEY) || 'setup'; } catch (e) {}
+            setActiveTab(savedTab);
+            document.querySelectorAll('.ai-tab').forEach(function(btn) {
+                btn.addEventListener('click', function() { setActiveTab(btn.getAttribute('data-tab')); });
+            });
+        }
+
+        function renderAnalysisResult(result, container) {
+            if (!container) return;
+            if (typeof result === 'string') {
+                container.innerHTML = '<pre style="white-space: pre-wrap; margin: 0;">' + escapeHtml(result) + '</pre>';
+                return;
+            }
+            var html = '';
+            if (result.highPriorityIssue) {
+                html += '<div class="ai-high-priority"><strong>Highest priority</strong>: ' + escapeHtml(result.highPriorityIssue) + '</div>';
+            }
+            if (result.issues && Array.isArray(result.issues) && result.issues.length > 0) {
+                for (var i = 0; i < result.issues.length; i++) {
+                    var issue = result.issues[i];
+                    var priority = (issue.priority || 'medium').toLowerCase();
+                    if (priority !== 'high' && priority !== 'medium' && priority !== 'low') priority = 'medium';
+                    html += '<div class="ai-issue-card priority-' + priority + '">';
+                    html += '<div class="ai-issue-title">' + escapeHtml(issue.title || 'Issue ' + (i + 1)) + '</div>';
+                    var meta = [];
+                    if (issue.category) meta.push('Category: ' + escapeHtml(issue.category));
+                    if (issue.affectedPods && issue.affectedPods.length) meta.push('Pods: ' + escapeHtml(issue.affectedPods.slice(0, 5).join(', ')) + (issue.affectedPods.length > 5 ? '…' : ''));
+                    if (meta.length) html += '<div class="ai-issue-meta">' + meta.join(' · ') + '</div>';
+                    if (issue.summary) html += '<div class="ai-issue-summary">' + escapeHtml(issue.summary) + '</div>';
+                    if (issue.suggestedActions) html += '<div class="ai-issue-actions">Suggested: ' + escapeHtml(issue.suggestedActions) + '</div>';
+                    if (issue.evidence) html += '<div class="ai-issue-evidence"><strong>Evidence:</strong> <span class="ai-evidence-text">' + escapeHtml(issue.evidence) + '</span></div>';
+                    if (issue.rootCauseOf) html += '<div class="ai-issue-root-cause">Root cause of: ' + escapeHtml(issue.rootCauseOf) + '</div>';
+                    html += '</div>';
+                }
+            }
+            container.innerHTML = html || '<p class="ai-analysis-placeholder">No structured issues returned.</p>';
         }
 
         // Render DR Policies
