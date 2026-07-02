@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Hitachi HSPC CSI Driver Log Bundle Collector v1.6.4
+# Hitachi HSPC CSI Driver Log Bundle Collector v1.7.1
 # - --kubeconfig is completely optional (uses default or $KUBECONFIG if present)
 # - Full OpenShift auto-detect + smart fallback to ./oc
 # - All manifests with status (deployments, daemonsets, replicasets)
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # Script version
-SCRIPT_VERSION="1.6.4-sh"
+SCRIPT_VERSION="1.7.1-sh"
 
 # Cancellation handling
 CANCELLED=false
@@ -84,10 +84,14 @@ TIMEOUT_SEC=300
 MUST_GATHER_TIMEOUT_SEC=1800
 COLLECT_MTC=false
 COLLECT_MTV=false
+COLLECT_MULTIPATH=true
+
+# Multipath collection: short-lived Job per node (requires create/delete Jobs in HSPC namespace)
+MULTIPATH_JOB_IMAGE="${MULTIPATH_JOB_IMAGE:-ubuntu:22.04}"
+MULTIPATH_JOB_TIMEOUT="${MULTIPATH_JOB_TIMEOUT:-120}"
 
 CRD_NAME="hspcs.csi.hitachi.com"
 KIND="HSPC"
-TELEMETRY_CR="cluster-telemetry"
 SERVICE_ACCOUNT="hspc-csi-sa"
 REPLICATION_NAMESPACE="hspc-replication-operator-system"
 
@@ -315,6 +319,167 @@ collect_must_gather() {
     fi
 }
 
+# Sanitize a node name into a valid Kubernetes Job name (DNS-1123, max 63 chars)
+sanitize_job_name() {
+    local name="$1"
+    local base
+    base=$(echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9.-]/-/g' | sed 's/\./-/g' | sed 's/-\+/-/g' | sed 's/^-//;s/-$//' | cut -c1-47)
+    [[ -z "$base" ]] && base="node"
+    echo "hspc-multipath-${base}" | cut -c1-63
+}
+
+# Collect multipath config per node.
+# On OpenShift (is_openshift=true) uses "oc debug node/<node>" — privileged by design, no SCC grants needed.
+# On plain Kubernetes uses a short-lived Job with hostPath + privileged container.
+collect_multipath() {
+    local kubeconfig="$1"
+    local cluster_name="$2"
+    local cluster_output_dir="$3"
+    local cluster_namespace="$4"
+    local is_openshift="$5"   # "true" if OpenShift detected on this cluster
+
+    [[ -z "$cluster_namespace" ]] && return 0
+
+    local multipath_dir="$cluster_output_dir/multipath"
+    mkdir -p "$multipath_dir"
+
+    local nodes
+    mapfile -t nodes < <(KUBE_WITH_CONFIG "$kubeconfig" get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -v '^$')
+    if [[ ${#nodes[@]} -eq 0 ]]; then
+        log "  No nodes found, skipping multipath collection"
+        return 0
+    fi
+
+    local saved_kubeconfig_arg="$KUBECONFIG_ARG"
+    if [[ -n "$kubeconfig" ]]; then
+        KUBECONFIG_ARG="--kubeconfig=$kubeconfig"
+    fi
+
+    local oc_kubeconfig_args=()
+    if [[ -n "$kubeconfig" ]]; then
+        oc_kubeconfig_args=("--kubeconfig=$kubeconfig")
+    fi
+
+    local multipath_cmd='echo "=== /etc/multipath.conf ==="; cat /host/etc/multipath.conf 2>/dev/null || echo "(not found)"; echo; echo "=== multipath -ll ==="; chroot /host multipath -ll 2>/dev/null || echo "(multipath not available)"'
+
+    if [[ "$is_openshift" == "true" ]] && [[ -n "$OC_CMD" ]]; then
+        log "Collecting multipath configuration from nodes via 'oc debug node' (OpenShift)..."
+        for node in "${nodes[@]}"; do
+            [[ -z "$node" ]] && continue
+            if [[ "$CANCELLED" == "true" ]]; then
+                KUBECONFIG_ARG="$saved_kubeconfig_arg"
+                return 0
+            fi
+            log "  Collecting multipath for node: $node"
+            if timeout "$MULTIPATH_JOB_TIMEOUT" "$OC_CMD" "${oc_kubeconfig_args[@]}" debug "node/$node" \
+                -- sh -c "$multipath_cmd" \
+                >"$multipath_dir/${node}.txt" 2>>"$cluster_output_dir/errors.log"; then
+                if [[ -s "$multipath_dir/${node}.txt" ]]; then
+                    log "  Collected multipath for node: $node"
+                else
+                    log "  WARNING: No output from multipath collection on node $node"
+                fi
+            else
+                log "  WARNING: multipath collection failed for node $node - see errors.log"
+            fi
+        done
+    else
+        log "Collecting multipath configuration from nodes via Jobs (Kubernetes)..."
+        for node in "${nodes[@]}"; do
+            [[ -z "$node" ]] && continue
+            if [[ "$CANCELLED" == "true" ]]; then
+                KUBECONFIG_ARG="$saved_kubeconfig_arg"
+                return 0
+            fi
+
+            local job_name
+            job_name=$(sanitize_job_name "$node")
+
+            local job_yaml
+            job_yaml=$(cat <<JOBEOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: $job_name
+  namespace: $cluster_namespace
+spec:
+  activeDeadlineSeconds: $MULTIPATH_JOB_TIMEOUT
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      nodeName: $node
+      containers:
+      - name: multipath
+        image: $MULTIPATH_JOB_IMAGE
+        securityContext:
+          privileged: true
+        command:
+        - sh
+        - -c
+        - |
+          echo '=== /etc/multipath.conf ==='
+          cat /etc/multipath.conf 2>/dev/null || echo '(not found)'
+          echo
+          echo '=== multipath -ll ==='
+          multipath -ll 2>/dev/null || echo '(multipath not available)'
+        volumeMounts:
+        - name: host-etc
+          mountPath: /etc
+          readOnly: true
+        - name: host-dev
+          mountPath: /dev
+      volumes:
+      - name: host-etc
+        hostPath:
+          path: /etc
+      - name: host-dev
+        hostPath:
+          path: /dev
+JOBEOF
+            )
+
+            local create_err
+            create_err=$(KUBE_WITH_CONFIG "$kubeconfig" create -f - <<< "$job_yaml" 2>&1)
+            local create_rc=$?
+            if [[ $create_rc -ne 0 ]]; then
+                echo "$create_err" >>"$cluster_output_dir/errors.log"
+                log "  WARNING: Could not create multipath Job for node $node - see errors.log"
+                continue
+            fi
+
+            local wait_time=0
+            local max_wait=$((MULTIPATH_JOB_TIMEOUT + 10))
+            while [[ $wait_time -lt $max_wait ]]; do
+                local complete
+                complete=$(KUBE_WITH_CONFIG "$kubeconfig" get job "$job_name" -n "$cluster_namespace" \
+                    -o jsonpath='{.status.completionTime}' 2>/dev/null)
+                [[ -n "$complete" ]] && break
+                sleep 2
+                wait_time=$((wait_time + 2))
+            done
+
+            local pod_name
+            pod_name=$(KUBE_WITH_CONFIG "$kubeconfig" get pods -n "$cluster_namespace" \
+                -l "job-name=$job_name" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+            if [[ -n "$pod_name" ]]; then
+                KUBE_WITH_CONFIG "$kubeconfig" logs "$pod_name" -n "$cluster_namespace" -c multipath \
+                    2>>"$cluster_output_dir/errors.log" >"$multipath_dir/${node}.txt" || true
+            fi
+
+            KUBE_WITH_CONFIG "$kubeconfig" delete job "$job_name" -n "$cluster_namespace" \
+                --ignore-not-found=true 2>>"$cluster_output_dir/errors.log" || true
+
+            if [[ -s "$multipath_dir/${node}.txt" ]]; then
+                log "  Collected multipath for node: $node"
+            fi
+        done
+    fi
+
+    KUBECONFIG_ARG="$saved_kubeconfig_arg"
+    log "Multipath collection complete for $cluster_name"
+}
+
 collect_from_cluster() {
     local kubeconfig="$1"
     local cluster_name="$2"
@@ -340,14 +505,20 @@ collect_from_cluster() {
     
     # Detect OpenShift and switch command if needed
     local cluster_cmd="$CMD"
+    local cluster_is_openshift=false
     if [[ "$cluster_cmd" == "$KUBECTL_CMD" ]]; then
         # Test OpenShift with this cluster's kubeconfig
         local line_count
         line_count=$(KUBE_WITH_CONFIG "$kubeconfig" api-resources --api-group=route.openshift.io 2>/dev/null | wc -l)
-        if [[ $line_count -gt 1 ]] && [[ -n "$OC_CMD" ]]; then
-            cluster_cmd="$OC_CMD"
-            log "OpenShift detected on $cluster_name → using oc"
+        if [[ $line_count -gt 1 ]]; then
+            cluster_is_openshift=true
+            if [[ -n "$OC_CMD" ]]; then
+                cluster_cmd="$OC_CMD"
+                log "OpenShift detected on $cluster_name → using oc"
+            fi
         fi
+    elif [[ "$cluster_cmd" == "$OC_CMD" ]]; then
+        cluster_is_openshift=true
     fi
     
     # Check for HSPC CRD
@@ -520,21 +691,6 @@ collect_from_cluster() {
         if [[ -n "$cluster_namespace" ]]; then
             echo -e "\n=== HSPC CR ==="
             KUBE_WITH_CONFIG "$kubeconfig" get hspc -n "$cluster_namespace" -o yaml 2>/dev/null || echo "No HSPC CR found"
-			
-			# ---------------------------------------------------------
-            # TELEMETRY CR COLLECTION (ADDED SECTION)
-            # Telemetry CR exists only after HSPC CR installation
-            # ---------------------------------------------------------
-
-            echo -e "\n=== Telemetry CR ==="
-
-            if KUBE_WITH_CONFIG "$kubeconfig" get crd telemetries.csi.hitachi.com >/dev/null 2>&1; then
-                if ! KUBE_WITH_CONFIG "$kubeconfig" get telemetry cluster-telemetry -n "$cluster_namespace" -o yaml 2>/dev/null; then
-                    echo "Telemetry CR not found"
-                fi
-            else
-                echo "Telemetry CRD not installed"
-            fi
             
             echo -e "\n=== Deployments ==="
             KUBE_WITH_CONFIG "$kubeconfig" get deploy -n "$cluster_namespace" -o yaml 2>/dev/null || echo "No deployments found"
@@ -553,6 +709,16 @@ collect_from_cluster() {
                 done
             else
                 echo "No HSPC StorageClasses found"
+            fi
+            
+            echo -e "\n=== HSPC VolumeSnapshotClasses ==="
+            vsc_names=$(KUBE_WITH_CONFIG "$kubeconfig" get volumesnapshotclass -o jsonpath='{range .items[?(@.driver=="hspc.csi.hitachi.com")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep -v '^$' || true)
+            if [[ -n "$vsc_names" ]]; then
+                echo "$vsc_names" | while read -r vsc; do
+                    [[ -n "$vsc" ]] && KUBE_WITH_CONFIG "$kubeconfig" get volumesnapshotclass "$vsc" -o yaml 2>/dev/null || true
+                done
+            else
+                echo "No HSPC VolumeSnapshotClasses found"
             fi
             
             # Collect Custom Resources if DR-Operator detected
@@ -670,6 +836,15 @@ collect_from_cluster() {
         log "WARNING: Failed to create cluster-context.txt"
     fi
     
+    # Collect multipath configuration from each node if requested (requires create/delete Jobs)
+    if [[ "$COLLECT_MULTIPATH" == "true" ]] && [[ -n "$cluster_namespace" ]]; then
+        if [[ "$CANCELLED" == "true" ]]; then
+            KUBECONFIG_ARG="$saved_kubeconfig_arg"
+            return 1
+        fi
+        collect_multipath "$kubeconfig" "$cluster_name" "$cluster_output_dir" "$cluster_namespace" "$cluster_is_openshift"
+    fi
+    
     # Run MTC must-gather if requested
     if [[ "$COLLECT_MTC" == "true" ]]; then
         if [[ "$CANCELLED" == "true" ]]; then
@@ -703,6 +878,7 @@ while [[ $# -gt 0 ]]; do
         -n|--namespace) NAMESPACE="$2"; shift 2 ;;
         -d|--dir)     OUTPUT_DIR="$2"; shift 2 ;;
         --no-compress) COMPRESS=false; shift ;;
+        --no-multipath) COLLECT_MULTIPATH=false; shift ;;
         --mtc)        COLLECT_MTC=true; shift ;;
         --mtv)        COLLECT_MTV=true; shift ;;
         -h|--help)
@@ -715,6 +891,7 @@ Usage: ./get_hitachicsilogs.sh [options]
   -n <ns>                      Force namespace
   -d <dir>                     Output dir
   --no-compress                No zip
+  --no-multipath               Skip multipath collection (/etc/multipath.conf and multipath -ll per node)
   --mtc                        Run oc adm must-gather for Migration Toolkit for Containers
                                (OpenShift + oc required; skipped with warning if not detected)
   --mtv                        Run oc adm must-gather for Migration Toolkit for Virtualization

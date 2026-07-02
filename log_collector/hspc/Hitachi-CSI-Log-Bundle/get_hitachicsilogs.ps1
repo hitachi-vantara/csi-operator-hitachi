@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Hitachi HSPC CSI Driver Log Bundle Collector v1.6.4 - PowerShell Edition
+    Hitachi HSPC CSI Driver Log Bundle Collector v1.7.1 - PowerShell Edition
     -Kubeconfig optional · auto-detect OpenShift · full manifests
     -Collects logs from ALL containers in each pod
     -Supports dual-cluster collection with DR-Operator detection
@@ -20,6 +20,9 @@
     Output directory (default: ./hspc-csi-logs-YYYYMMDD-HHMMSS)
 .PARAMETER NoCompress
     Skip zip file creation
+.PARAMETER NoCollectMultipath
+    Skip multipath collection (/etc/multipath.conf and multipath -ll from each node).
+    Multipath is collected by default.
 .PARAMETER Mtc
     Run oc adm must-gather for Migration Toolkit for Containers.
     Requires OpenShift and oc to be available; skipped with a warning if not detected.
@@ -63,6 +66,7 @@ param(
     [string]$Namespace = "",
     [string]$Dir = "",
     [switch]$NoCompress,
+    [switch]$NoCollectMultipath,
     [switch]$Mtc,
     [switch]$Mtv,
     [Alias("h")]
@@ -72,7 +76,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Script version
-$SCRIPT_VERSION = "1.6.4-ps1"
+$SCRIPT_VERSION = "1.7.1-ps1"
 
 # Cancellation handling
 $script:Cancelled = $false
@@ -182,6 +186,7 @@ Usage: ./get_hitachicsilogs.ps1 [options]
   -Namespace <ns>              Force namespace
   -Dir <dir>                   Output dir
   -NoCompress                  No zip
+  -NoCollectMultipath          Skip multipath collection (/etc/multipath.conf and multipath -ll per node)
   -Mtc                         Run oc adm must-gather for Migration Toolkit for Containers
                                Requires OpenShift and oc; skipped with warning if not available
   -Mtv                         Run oc adm must-gather for Migration Toolkit for Virtualization
@@ -394,6 +399,160 @@ function Invoke-MustGather {
     }
 }
 
+function Get-SanitizedJobName {
+    param([string]$NodeName)
+    $base = $NodeName.ToLower() -replace '[^a-z0-9.-]', '-' -replace '\.', '-' -replace '-+', '-' -replace '^-|-$', ''
+    if ($base.Length -gt 47) { $base = $base.Substring(0, 47) }
+    if (-not $base) { $base = "node" }
+    $name = "hspc-multipath-$base"
+    if ($name.Length -gt 63) { $name = $name.Substring(0, 63) }
+    return $name
+}
+
+# Collect multipath config per node.
+# On OpenShift uses "oc debug node/<node>" — privileged by design, no SCC grants needed.
+# On plain Kubernetes uses a short-lived Job with hostPath + privileged container.
+function Invoke-MultipathCollection {
+    param(
+        [string]$KubeconfigPath,
+        [string]$ClusterName,
+        [string]$ClusterOutputDir,
+        [string]$ClusterNamespace,
+        [bool]$IsOpenShift = $false
+    )
+    if (-not $ClusterNamespace) { return }
+
+    $multipathDir = Join-Path $ClusterOutputDir "multipath"
+    New-Item -ItemType Directory -Force -Path $multipathDir | Out-Null
+
+    $ErrorActionPreference = 'SilentlyContinue'
+    $nodesOutput = Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>$null
+    $ErrorActionPreference = 'Stop'
+    $nodes = @($nodesOutput -split "`n" | Where-Object { $_.Trim() })
+    if ($nodes.Count -eq 0) {
+        Log "  No nodes found, skipping multipath collection"
+        return
+    }
+
+    $errorsLog = Join-Path $ClusterOutputDir "errors.log"
+
+    if ($IsOpenShift -and $OcCmd) {
+        Log "Collecting multipath configuration from nodes via 'oc debug node' (OpenShift)..."
+        $ocKubeconfigArgs = @()
+        if ($KubeconfigPath) { $ocKubeconfigArgs += "--kubeconfig=$KubeconfigPath" }
+        $multipathCmd = 'echo "=== /etc/multipath.conf ==="; cat /host/etc/multipath.conf 2>/dev/null || echo "(not found)"; echo; echo "=== multipath -ll ==="; chroot /host multipath -ll 2>/dev/null || echo "(multipath not available)"'
+
+        foreach ($node in $nodes) {
+            if (-not $node) { continue }
+            if ($script:Cancelled) { return }
+            Log "  Collecting multipath for node: $node"
+            $outFile = Join-Path $multipathDir "$node.txt"
+            $ErrorActionPreference = 'SilentlyContinue'
+            & $OcCmd $ocKubeconfigArgs debug "node/$node" -- sh -c $multipathCmd > $outFile 2>> $errorsLog
+            $debugOk = $LASTEXITCODE -eq 0
+            $ErrorActionPreference = 'Stop'
+            if ($debugOk -and (Test-Path $outFile) -and (Get-Item $outFile).Length -gt 0) {
+                Log "  Collected multipath for node: $node"
+            } else {
+                Log "  WARNING: multipath collection failed for node $node - see errors.log"
+            }
+        }
+    } else {
+        $jobImage = if ($env:MULTIPATH_JOB_IMAGE) { $env:MULTIPATH_JOB_IMAGE } else { "ubuntu:22.04" }
+        $jobTimeout = if ($env:MULTIPATH_JOB_TIMEOUT) { $env:MULTIPATH_JOB_TIMEOUT } else { "120" }
+        Log "Collecting multipath configuration from nodes via Jobs (Kubernetes)..."
+
+        foreach ($node in $nodes) {
+            if (-not $node) { continue }
+            if ($script:Cancelled) { return }
+
+            $jobName = Get-SanitizedJobName -NodeName $node
+            $jobYaml = @"
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: $jobName
+  namespace: $ClusterNamespace
+spec:
+  activeDeadlineSeconds: $jobTimeout
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      nodeName: $node
+      containers:
+      - name: multipath
+        image: $jobImage
+        securityContext:
+          privileged: true
+        command:
+        - sh
+        - -c
+        - |
+          echo '=== /etc/multipath.conf ==='
+          cat /etc/multipath.conf 2>/dev/null || echo '(not found)'
+          echo
+          echo '=== multipath -ll ==='
+          multipath -ll 2>/dev/null || echo '(multipath not available)'
+        volumeMounts:
+        - name: host-etc
+          mountPath: /etc
+          readOnly: true
+        - name: host-dev
+          mountPath: /dev
+      volumes:
+      - name: host-etc
+        hostPath:
+          path: /etc
+      - name: host-dev
+        hostPath:
+          path: /dev
+"@
+            $tempFile = [System.IO.Path]::GetTempFileName()
+            try {
+                $jobYaml | Out-File -Encoding utf8 -FilePath $tempFile
+                $createArgs = @("create", "-f", $tempFile)
+                if ($KubeconfigPath) { $createArgs = @("--kubeconfig=$KubeconfigPath") + $createArgs }
+                $ErrorActionPreference = 'SilentlyContinue'
+                $createErr = & $Cmd $createArgs 2>&1
+                $createOk = $LASTEXITCODE -eq 0
+                $ErrorActionPreference = 'Stop'
+                if (-not $createOk) {
+                    $createErr | Out-File -Encoding utf8 -Append $errorsLog
+                    Log "  WARNING: Could not create multipath Job for node $node - see errors.log"
+                    continue
+                }
+
+                $maxWait = [int]$jobTimeout + 10
+                $waitTime = 0
+                while ($waitTime -lt $maxWait) {
+                    $complete = Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get job $jobName -n $ClusterNamespace -o jsonpath='{.status.completionTime}' 2>$null
+                    if ($complete) { break }
+                    Start-Sleep -Seconds 2
+                    $waitTime += 2
+                }
+
+                $podName = Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get pods -n $ClusterNamespace -l "job-name=$jobName" -o jsonpath='{.items[0].metadata.name}' 2>$null
+                if ($podName) {
+                    $outFile = Join-Path $multipathDir "$node.txt"
+                    Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath logs $podName -n $ClusterNamespace -c multipath 2>> $errorsLog | Out-File -Encoding utf8 $outFile
+                }
+
+                Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath delete job $jobName -n $ClusterNamespace --ignore-not-found=true 2>> $errorsLog | Out-Null
+            } finally {
+                if (Test-Path $tempFile) { Remove-Item -Force $tempFile }
+            }
+
+            $outPath = Join-Path $multipathDir "$node.txt"
+            if ((Test-Path $outPath) -and (Get-Item $outPath).Length -gt 0) {
+                Log "  Collected multipath for node: $node"
+            }
+        }
+    }
+
+    Log "Multipath collection complete for $ClusterName"
+}
+
 function Get-FromCluster {
     param(
         [string]$KubeconfigPath,
@@ -424,6 +583,12 @@ function Get-FromCluster {
     # Also check if kubectl actually works, if not use oc
     $clusterCmd = $Cmd
     $cmdSwitched = $false
+    $clusterIsOpenShift = $false
+
+    # If already using oc, this is OpenShift
+    if ($clusterCmd -like "*oc*" -and $clusterCmd -notlike "*kubectl*") {
+        $clusterIsOpenShift = $true
+    }
     
     # First check if kubectl actually exists and works
     if ($clusterCmd -like "*kubectl*") {
@@ -442,6 +607,7 @@ function Get-FromCluster {
                         $clusterCmd = $OcCmd
                         $script:Cmd = $OcCmd
                         $cmdSwitched = $true
+                        $clusterIsOpenShift = $true
                         Log "kubectl not available on $ClusterName → using oc"
                     }
                 } catch {
@@ -457,11 +623,14 @@ function Get-FromCluster {
         $ErrorActionPreference = 'SilentlyContinue'
         try {
             $routeCheck = @(Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath api-resources --api-group=route.openshift.io 2>$null | Where-Object { $_.Trim() })
-            if ($routeCheck.Count -gt 1 -and $OcCmd) {
-                $clusterCmd = $OcCmd
-                $script:Cmd = $OcCmd
-                $cmdSwitched = $true
-                Log "OpenShift detected on $ClusterName → using oc"
+            if ($routeCheck.Count -gt 1) {
+                $clusterIsOpenShift = $true
+                if ($OcCmd) {
+                    $clusterCmd = $OcCmd
+                    $script:Cmd = $OcCmd
+                    $cmdSwitched = $true
+                    Log "OpenShift detected on $ClusterName → using oc"
+                }
             }
         } catch {
             # If kubectl fails, try oc
@@ -469,6 +638,7 @@ function Get-FromCluster {
                 $clusterCmd = $OcCmd
                 $script:Cmd = $OcCmd
                 $cmdSwitched = $true
+                $clusterIsOpenShift = $true
                 Log "kubectl command failed on $ClusterName → using oc"
             }
         }
@@ -817,25 +987,6 @@ function Get-FromCluster {
         } catch {
             "No HSPC CR found" | Out-File -Encoding utf8 -Append $contextFile
         }
-		
-		"`n=== Telemetry CR ===" | Out-File -Encoding utf8 -Append $contextFile
-
-        try {
-            $telemetryCRD = Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get crd telemetries.csi.hitachi.com -o name 2>$null
-        } catch {
-            $telemetryCRD = $null
-        }
-
-        if ($telemetryCRD) {
-            try {
-                Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get telemetry cluster-telemetry -n $clusterNamespace -o yaml |
-                    Out-File -Encoding utf8 -Append $contextFile
-            } catch {
-                "Telemetry CR not found" | Out-File -Encoding utf8 -Append $contextFile
-            }
-        } else {
-            "Telemetry CRD not installed" | Out-File -Encoding utf8 -Append $contextFile
-        }
         
         "`n=== All Deployments ===" | Out-File -Encoding utf8 -Append $contextFile
         try {
@@ -876,6 +1027,22 @@ function Get-FromCluster {
         }
     } catch {
         "Error retrieving HSPC StorageClasses" | Out-File -Encoding utf8 -Append $contextFile
+    }
+    
+    "`n=== HSPC VolumeSnapshotClasses ===" | Out-File -Encoding utf8 -Append $contextFile
+    try {
+        $ErrorActionPreference = 'SilentlyContinue'
+        $vscNames = (Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get volumesnapshotclass -o jsonpath='{range .items[?(@.driver=="hspc.csi.hitachi.com")]}{.metadata.name}{"\n"}{end}' 2>$null).Trim() -split "`n" | Where-Object { $_.Length -gt 0 }
+        $ErrorActionPreference = 'Stop'
+        if ($vscNames.Count -gt 0) {
+            foreach ($vsc in $vscNames) {
+                Invoke-KubeWithConfig -KubeconfigPath $KubeconfigPath get volumesnapshotclass $vsc -o yaml | Out-File -Encoding utf8 -Append $contextFile
+            }
+        } else {
+            "No HSPC VolumeSnapshotClasses found" | Out-File -Encoding utf8 -Append $contextFile
+        }
+    } catch {
+        "Error retrieving HSPC VolumeSnapshotClasses" | Out-File -Encoding utf8 -Append $contextFile
     }
     
     # Collect Custom Resources if DR-Operator detected
@@ -1042,6 +1209,14 @@ function Get-FromCluster {
         Log "Cluster context saved: $contextFile"
     } else {
         Log "WARNING: Failed to create cluster-context.txt"
+    }
+    
+    if (-not $NoCollectMultipath -and $clusterNamespace) {
+        if ($script:Cancelled) {
+            $Kubeconfig = $savedKubeconfig
+            return
+        }
+        Invoke-MultipathCollection -KubeconfigPath $KubeconfigPath -ClusterName $ClusterName -ClusterOutputDir $clusterOutputDir -ClusterNamespace $clusterNamespace -IsOpenShift $clusterIsOpenShift
     }
     
     # Run MTC must-gather if requested

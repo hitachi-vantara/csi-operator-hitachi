@@ -2,12 +2,14 @@
 
 A comprehensive log collection tool for Hitachi CSI drivers running in Kubernetes or OpenShift environments. This tool automatically discovers your HSPC installation, collects logs from all our CSI's pods and containers, gathers cluster context, and packages everything into a convenient bundle for troubleshooting and support.
 
+> **Log Viewer**: [https://cmccuistion-hv.github.io/Hitachi-CSI-Log-Bundle/](https://cmccuistion-hv.github.io/Hitachi-CSI-Log-Bundle/) — Open directly in your browser, no installation required.
+
 ## Features
 
 - 🔍 **Auto-Discovery**: Automatically detects HSPC namespace and resources
 - 🎯 **Platform-Aware**: Detects OpenShift, Kubernetes, k3s, Rancher, and RKE2 clusters
 - 📦 **Complete Collection**: Gathers logs from all containers in each pod
-- 🏗️ **Full Context**: Captures cluster version, node info, manifests, events, and resource descriptions
+- 🏗️ **Full Context**: Captures cluster version, node info, manifests, events, multipath configuration, and resource descriptions
 - 🔄 **Multi-Cluster Support**: Collect logs from both primary and secondary clusters for DR-Operator environments
 - 🛡️ **DR-Operator Integration**: Automatically detects and collects DR-Operator logs and Custom Resources
 - 🗜️ **Auto-Compression**: Creates zip archives automatically (optional)
@@ -15,6 +17,7 @@ A comprehensive log collection tool for Hitachi CSI drivers running in Kubernete
 - 💻 **Cross-Platform**: Both Bash and PowerShell versions available
 - 🔬 **Must-Gather Integration**: Optionally run `oc adm must-gather` for Migration Toolkit for Containers (MTC) and/or Migration Toolkit for Virtualization (MTV)
 - 📊 **Advanced Log Viewer**: HTML-based viewer with filtering, search, DR Policies management, and multi-cluster comparison
+- 🤖 **AI-Powered Analysis**: Analyze log bundles with an LLM (OpenAI-compatible API) for prioritized issues, root cause, and recommended actions; optional follow-up chat with context from your logs
 
 ## Requirements
 
@@ -38,8 +41,8 @@ A comprehensive log collection tool for Hitachi CSI drivers running in Kubernete
 1. Download the appropriate script for your platform:
    ```bash
    # Clone the repository
-   git clone https://github.com/hitachi-vantara/csi-operator-hitachi.git
-   cd csi-operator-hitachi/log_collector/hspc/Hitachi-CSI-Log-Bundle
+   git clone https://github.com/cmccuistion-hv/Hitachi-CSI-Log-Bundle.git
+   cd Hitachi-CSI-Log-Bundle
    ```
 
 2. Make the bash script executable (Linux/macOS):
@@ -103,6 +106,11 @@ A comprehensive log collection tool for Hitachi CSI drivers running in Kubernete
 **Run both must-gathers together**:
 ```bash
 ./get_hitachicsilogs.sh --mtc --mtv
+```
+
+Multipath configuration is **collected by default**. To skip it:
+```bash
+./get_hitachicsilogs.sh --no-multipath
 ```
 
 **View help**:
@@ -181,6 +189,11 @@ sed -i 's/\r$//' get_hitachicsilogs.sh
 .\get_hitachicsilogs.ps1 -Mtc -Mtv
 ```
 
+Multipath is **collected by default**. To skip it:
+```powershell
+.\get_hitachicsilogs.ps1 -NoCollectMultipath
+```
+
 **View help**:
 ```powershell
 .\get_hitachicsilogs.ps1 -h
@@ -208,6 +221,7 @@ Get-Help .\get_hitachicsilogs.ps1
 | `--kubeconfig-primary <file>` | Path to primary cluster kubeconfig (for multi-cluster) | - |
 | `--kubeconfig-secondary <file>` | Path to secondary cluster kubeconfig (for multi-cluster) | - |
 | `--no-compress` | Skip zip creation | Creates zip |
+| `--no-multipath` | Skip multipath collection (`/etc/multipath.conf` and `multipath -ll` per node) | Multipath collected by default |
 | `--mtc` | Run `oc adm must-gather` for Migration Toolkit for Containers (OpenShift + oc required) | Disabled |
 | `--mtv` | Run `oc adm must-gather` for Migration Toolkit for Virtualization (OpenShift + oc required) | Disabled |
 | `-h, --help` | Show concise help message | - |
@@ -223,6 +237,7 @@ Get-Help .\get_hitachicsilogs.ps1
 | `-KubeconfigPrimary <file>` | Path to primary cluster kubeconfig (for multi-cluster) | - |
 | `-KubeconfigSecondary <file>` | Path to secondary cluster kubeconfig (for multi-cluster) | - |
 | `-NoCompress` | Skip zip creation | Creates zip |
+| `-NoCollectMultipath` | Skip multipath collection (`/etc/multipath.conf` and `multipath -ll` per node) | Multipath collected by default |
 | `-Mtc` | Run `oc adm must-gather` for Migration Toolkit for Containers (OpenShift + oc required) | Disabled |
 | `-Mtv` | Run `oc adm must-gather` for Migration Toolkit for Virtualization (OpenShift + oc required) | Disabled |
 | `-Help, -h` | Show concise help message | - |
@@ -237,12 +252,20 @@ The script creates a directory (and optionally a zip file) containing:
 
 ## Log Viewer
 
-Download `Hitachi-CSI-log-Bundle-Viewer.html` from this repository and open it locally in any modern browser.
+The log viewer is available online at **[https://cmccuistion-hv.github.io/Hitachi-CSI-Log-Bundle/](https://cmccuistion-hv.github.io/Hitachi-CSI-Log-Bundle/)** — no installation required, just open it in your browser and load your log bundle.
+
+Alternatively, download `Hitachi-CSI-log-Bundle-Viewer.html` from this repository and open it locally in any modern browser.
 
 **Note**: The viewer supports both ZIP files and folders. Drag and drop ZIP files directly, or use the browse buttons to select either ZIP files or folders.
 
 ### Viewer Features
 
+- **AI Analysis**: Analyze the loaded log bundle with an LLM (OpenAI-compatible API) to get a prioritized list of issues and recommended next steps.
+  - Configurable API key, endpoint URL, and model (e.g. gpt-4o-mini); API key is sent only to your chosen provider.
+  - Rich analysis payload: environment summary (platform, versions, node count), error categories with counts, key identifiers (HSPC codes, volume IDs), smart error-line sampling, config summary, cluster context excerpt, and pod/node health.
+  - Default completion limit of **16,384 tokens** for analysis and chat (supports fuller responses on models such as GPT-4o / GPT-4o-mini; provider may cap to the model maximum).
+  - Results shown as priority-ranked issue cards (high/medium/low) with evidence, root cause, and recommended actions; markdown output with safe HTML (DOMPurify).
+  - **Chat**: Follow-up questions about your logs; relevant excerpts are sent to the model. Copy, save, or clear chat history. Collapsible sections for setup, results, and chat.
 - **Multi-Cluster Support**: View and filter logs, health data, and configuration by cluster when using multi-cluster bundles
 - **DR Policies Management**: Dedicated tab for viewing and managing DR Policies (automatically appears when DR-Operator CRDs are detected)
   - Side-by-side comparison of matching DR Policies across clusters
@@ -273,6 +296,12 @@ Contains comprehensive cluster and application information:
 9. **Pod Descriptions**: Detailed `kubectl describe` output for each pod
 10. **Recent Events**: Last 100 events in the namespace
 11. **DR-Operator Resources** (when detected): LocalVolume, RemoteVolume, Replication, and DRPolicy Custom Resources
+
+### Multipatch Collection ###
+Multipath is collected by default unless `--no-multipath` (Bash) or `-NoCollectMultipath` (PowerShell) is used. When collected:
+- `multipath/<node-name>.txt` - Per-node output: `/etc/multipath.conf` and `multipath -ll`
+  - **OpenShift**: uses `oc debug node/<node>` (built-in privileged access, no Jobs or extra RBAC)
+  - **Kubernetes**: uses a short-lived privileged Job per node with hostPath mounts to `/etc` and `/dev` (requires create/delete Jobs in the HSPC namespace). Optional env: `MULTIPATH_JOB_IMAGE` (default `ubuntu:22.04`), `MULTIPATH_JOB_TIMEOUT` (default `120` seconds)
 
 ### Must-Gather Output (optional)
 When `--mtc` or `--mtv` (Bash) / `-Mtc` or `-Mtv` (PowerShell) are specified:
@@ -335,7 +364,8 @@ When `--mtc` or `--mtv` (Bash) / `-Mtc` or `-Mtv` (PowerShell) are specified:
 
 ## Support
 
-For questions, or contributions:
+For issues, questions, or contributions:
+- Open an issue on [GitHub](https://github.com/cmccuistion-hv/Hitachi-CSI-Log-Bundle/issues)
 - For Hitachi CSI driver support, contact your Hitachi Vantara representative
 
 ## License
