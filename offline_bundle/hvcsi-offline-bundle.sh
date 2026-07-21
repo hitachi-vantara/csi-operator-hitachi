@@ -667,7 +667,20 @@ EOF
 #
 
 set -eo pipefail
-BASE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+BASE_DIR="$SCRIPT_DIR"
+
+while [[ "$BASE_DIR" != "/" ]]; do
+    if [[ -d "${BASE_DIR}/hspc" ]] || [[ -d "${BASE_DIR}/hspp" ]] || [[ -d "${BASE_DIR}/hrpc" ]]; then
+        break
+    fi
+    BASE_DIR="$(dirname "$BASE_DIR")"
+done
+
+if [[ "$BASE_DIR" == "/" ]]; then
+    lognexit "Error: Could not locate the csi-operator-hitachi repository. Place the script inside the repository (for example, in an 'offline-bundle' directory)."
+fi
 
 main() {
   local plugin_version=""
