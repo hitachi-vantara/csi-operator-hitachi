@@ -1,0 +1,22 @@
+#####################################################################################################################################################
+#This is a sample cluster image policy. User may need to update as per thier environment. Pucblic key is obtained by enconding: base64 -w0 HV_PK.pem
+#####################################################################################################################################################
+
+....
+apiVersion: config.openshift.io/v1
+kind: ClusterImagePolicy
+metadata:
+  name: sample-hitachi-imagepolicy
+spec:
+  scopes:
+    - registry.hitachivantara.com/hitachicsi-oci-oss/hspc-operator
+    - registry.hitachivantara.com/hitachicsi-oci-oss/hspc-csi-driver
+    - registry.hitachivantara.com/hitachicsi-oci-oss/hspc-csi-telemetry-service
+  policy:
+    rootOfTrust:
+      policyType: PublicKey
+      publicKey:
+        keyData: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0NCk1JSUJvakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBWThBTUlJQmlnS0NBWUVBNXRxTnNWdGZjbEY0N01GZUVYdFINCk9VTENsdDFqT1NqenZxb1pHeC9kWjRrMDZXTG9WQlBoM1NIL080ZkpWVHJHVXMzeFlqdzZ2dU9xclM0ZGlRNnINCmNKVnlaSThPZGxkOStWb2V0dnNUeGVpeXp3K1MrQUx3SWYzSE1ZdDZsYU96Ymo0c3diVVNGYlBRL090dmlQRlUNClRiTk5EbkNTZ0tPTytBc0RwZ1U2YXdkdTkvZmF0NURiTGVQejBUaW1jbGVMUHAvMGVYRVh0Ym5pZnZicGoxdnANCnJLZ1dNUk9hT3VSNWo2Z2U1MU1mYTVWN0R6NlJmaUlhQ01TRHZHRFZFWFZESm84anpibG0xc0FWNnIwYTBCMFgNCnhCWE14VnZIMmpiRkVJWWxoS0JnSDh6czZEbjNEMW9zakt5bVdrYjhBTjUxZkRzTEJ6YzZpTXVrV05yOE1QMmwNCjBWTXBCV0FJUWw2ZmNjTm9mUmgxV1dDd1FzWnZhNlQzeW9vQWVpekRWcldSSXpHeEVMNkJ5azJLT2M4VVNSOWQNCjZxUERPaHZIVmc1YkdQZmZVdW1rOVRUZXNxcDdQRW1pYlo2NjJENDcxOEh5QkNpOEtPMzZ2WU1ORXhIWmVLSTQNCkdGaVBlMUFKOEtoVzdVUU1uUUpmanBpa2E1NUJQWE1qWWJCNU15Tkx0dlBUQWdNQkFBRT0NCi0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQ==
+    signedIdentity:
+      matchPolicy: MatchRepository 
+....    

@@ -1,0 +1,14 @@
+apiVersion: csi.hitachi.com/v1
+kind: GadPairAction
+metadata:
+  name: gadpairaction-sample
+  namespace: hvplugin
+spec:
+  action: resync #Specify the operation that you want to perform, split or resync.
+  remoteMirrorCopyPairId: 900000040015,spc-test-ctg-1bk,spc-test-ctg-1bkP_,spc-test-ctg-1bkS_,spc-1906-2970 #Optional): Specify the copy pair ID. If you do not specify the ID, the system will identify the pair by using the PVC name.
+  storageClassName: sc-stretched-41001415a #Specify the storage class name.
+  source:
+    persistentVolumeClaimName: stretched-pvc-41001415a-1 #(Optional): Specify the PVC name. If you do not specify the name, the system will identify the name by using the remoteMirrorCopyPairId.
+  retryPolicy:
+    maxRetries: 2 #Enter an integer to specify the maximum number of times the operation should   be retried.
+    interval: 120s #Enter a string to specify the time interval between retry attempts. For example, 120s (120 seconds) or 2mins (2 minutes).

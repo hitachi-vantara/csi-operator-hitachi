@@ -1,0 +1,26 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: sc-sample
+  annotations:
+    kubernetes.io/description: Hitachi Storage Plug-in for Containers
+provisioner: hspc.csi.hitachi.com
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+parameters:
+  serialNumber: "54321"
+  poolID: "1"
+  portID: CL1-A,CL2-A
+  connectionType: fc
+  csi.storage.k8s.io/fstype: ext4
+  csi.storage.k8s.io/node-publish-secret-name: "secret-sample"
+  csi.storage.k8s.io/node-publish-secret-namespace: "default"
+  csi.storage.k8s.io/provisioner-secret-name: "secret-sample"
+  csi.storage.k8s.io/provisioner-secret-namespace: "default"
+  csi.storage.k8s.io/controller-publish-secret-name: "secret-sample"
+  csi.storage.k8s.io/controller-publish-secret-namespace: "default"
+  csi.storage.k8s.io/node-stage-secret-name: "secret-sample"
+  csi.storage.k8s.io/node-stage-secret-namespace: "default"
+  csi.storage.k8s.io/controller-expand-secret-name: "secret-sample"
+  csi.storage.k8s.io/controller-expand-secret-namespace: "default"
