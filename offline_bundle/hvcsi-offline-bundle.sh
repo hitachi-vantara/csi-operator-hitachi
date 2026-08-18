@@ -188,6 +188,7 @@ get_images_hspc() {
   else
     # k8s version is not specified, glob all driver manifests
     driver_files="${manifest_base}/sample/hspc-k8s"*.yaml
+    driver_files+=" ${manifest_base}/sample/consoleplugin-ocp-ui.yaml"
     # Check if the glob found any files
     if ! ls $driver_files &> /dev/null; then
         lognexit "Error: No driver manifests found in ${manifest_base}/sample/"
@@ -233,7 +234,7 @@ get_images_generic() {
     lognexit "Checked paths: ${plugin_path}/yaml/, ${plugin_path}/dr-operator/yaml/ and ${plugin_path}/"
   fi
 
-  log "Scanning ${#manifest_files[@]} manifest file(s) for images (${plugin})..." 
+  log "Scanning ${#manifest_files[@]} manifest file(s) for images (${plugin})..."
   grep -h 'image:' "${manifest_files[@]}" | awk '{print $2}' | sed 's/"//g' | sort -u
 }
 
