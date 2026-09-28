@@ -628,7 +628,8 @@ create_offline_crd() {
   local csi_resizer_image=$(grep -A 5 "name: csi-resizer" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
   local csi_snapshotter_image=$(grep -A 5 "name: csi-snapshotter" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
   local driver_registrar_image=$(grep -A 15 "name: driver-registrar" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
-
+  local telemetry_image=$(grep -A 15 "name: hspc-csi-telemetry-service" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
+  local config_operator_image=$(grep -A 15 "name: hspc-config-operator" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
   # First, remove the existing spec: {} line from the CRD file
   sed -i '/^spec: {}$/d' "$offline_crd_file"
 
@@ -651,6 +652,10 @@ spec:
         image: ${csi_resizer_image}
       - name: csi-snapshotter
         image: ${csi_snapshotter_image}
+      - name: hspc-csi-telemetry-service
+        image: ${telemetry_image}
+      - name: hspc-config-operator
+        image: ${config_operator_image}
   node:
     containers:
       - name: hspc-csi-driver
