@@ -4,7 +4,7 @@
 #
 #   •	Hitachi Vantara CSI - Offline Bundle Script
 #
-#   This script facilitates the deployment of Hitachi Vantara CSI components 
+#   This script facilitates the deployment of Hitachi Vantara CSI components
 #   in air-gapped or offline environments. It provides
 #   functionality to create a self-contained bundle with all necessary
 #   container images and manifest files, and to prepare those assets for
@@ -279,10 +279,52 @@ create_bundle() {
     safe_name=$(echo "$img" | sed 's|[/:@]|_|g')
     local img_dir="${temp_dir}/${images_folder}/${safe_name}"
     log "  Copying $img -> ${safe_name}"
-    skopeo copy --all --preserve-digests \
-      "docker://${img}" "dir:${img_dir}" >> "$LOG_FILE" 2>&1 \
-      || lognexit "Error: skopeo copy failed for $img"
-    echo "\"${img}\",\"${safe_name}\"" >> "$map_file"
+    local copy_success=false
+    local is_redhat_image=false
+    [[ "$img" == registry.redhat.io/* ]] && is_redhat_image=true
+
+    for attempt in 1 2 3; do
+      if skopeo copy --all --preserve-digests \
+        "docker://${img}" "dir:${img_dir}" >> "$LOG_FILE" 2>&1; then
+        copy_success=true
+        break
+      fi
+
+      if [[ "$is_redhat_image" != true ]]; then
+        lognexit "Error: skopeo copy failed for $img"
+      fi
+
+      if [[ "$attempt" -eq 3 ]]; then
+        log "ERROR: Red Hat Registry authentication failed after 3 attempts for $img."
+        log "WARNING: Skipping $img. Bundle generation will continue without this image."
+        break
+      fi
+
+      log "WARNING: Red Hat Registry authentication failed for $img (attempt ${attempt}/3)."
+      echo
+      echo "Red Hat Registry authentication is required for:"
+      echo "  $img"
+      echo "Would you like to login to registry.redhat.io and retry? [Y/n]: "
+      read -r retry_auth
+
+      if [[ "$retry_auth" =~ ^[Nn]$ ]]; then
+        log "WARNING: User chose not to retry Red Hat Registry authentication for $img. Skipping image."
+        break
+      fi
+
+      log "Attempting Red Hat Registry login..."
+      if ! podman login registry.redhat.io; then
+        log "WARNING: Red Hat Registry login failed for $img."
+      else
+        log "Red Hat Registry login completed. Retrying image copy."
+      fi
+    done
+
+    if [[ "$copy_success" == true ]]; then
+      echo "\"${img}\",\"${safe_name}\"" >> "$map_file"
+    else
+      rm -rf "$img_dir"
+    fi
   done
 
   log "Copying installation files from ${plugin_path}..."
