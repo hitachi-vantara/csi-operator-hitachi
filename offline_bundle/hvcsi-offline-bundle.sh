@@ -171,6 +171,10 @@ get_images_hspc() {
     manifest_base="${plugin_path}/yaml"
   elif [[ -d "${plugin_path}/operator" && -d "${plugin_path}/sample" ]]; then
     manifest_base="${plugin_path}"
+  elif [[ -d "${plugin_path}/yaml/operator" && -d "${plugin_path}/yaml/sample/config" ]]; then
+    manifest_base="${plugin_path}/yaml"
+  elif [[ -d "${plugin_path}/operator" && -d "${plugin_path}/sample/config" ]]; then
+    manifest_base="${plugin_path}"
   else
     log "Error: Could not find 'operator' and 'sample' folders for HSPC version '$plugin_version'."
     lognexit "Checked paths: ${plugin_path}/yaml/ and ${plugin_path}/"
@@ -181,14 +185,25 @@ get_images_hspc() {
 
   if [[ -n "$k8s_version" ]]; then
     # k8s version is specified, look for a specific file
-    driver_files="${manifest_base}/sample/hspc-k8s${k8s_version}.yaml"
+    if [[ -f "${manifest_base}/sample/config/hspc-k8s${k8s_version}.yaml" ]]; then
+      driver_files="${manifest_base}/sample/config/hspc-k8s${k8s_version}.yaml"
+    else
+      driver_files="${manifest_base}/sample/hspc-k8s${k8s_version}.yaml"
+    fi
     if [[ ! -f "$driver_files" ]]; then
       lognexit "Error: Specified driver manifest not found: $driver_files"
     fi
   else
     # k8s version is not specified, glob all driver manifests
     driver_files="${manifest_base}/sample/hspc-k8s"*.yaml
-    driver_files+=" ${manifest_base}/sample/consoleplugin-ocp-ui.yaml"
+    if compgen -G "${manifest_base}/sample/config/hspc-k8s*.yaml" > /dev/null; then
+      driver_files="${manifest_base}/sample/config/hspc-k8s"*.yaml
+    fi
+    if [[ -f "${manifest_base}/sample/openshift/consoleplugin-ocp-ui.yaml" ]]; then
+      driver_files+=" ${manifest_base}/sample/openshift/consoleplugin-ocp-ui.yaml"
+    else
+      driver_files+=" ${manifest_base}/sample/consoleplugin-ocp-ui.yaml"
+    fi
     # Check if the glob found any files
     if ! ls $driver_files &> /dev/null; then
         lognexit "Error: No driver manifests found in ${manifest_base}/sample/"
@@ -556,18 +571,41 @@ update_manifests_hspc() {
   fi
 
   # Sample manifests
-  local sample_files="${hspc_path}/sample/hspc-k8s"*.yaml
-  for sample_file in $sample_files; do
-    if [[ -f "$sample_file" ]]; then
-      # Skip already generated offline manifests
-      [[ "$sample_file" == *-offline.yaml ]] && continue
-      local filename=$(basename "$sample_file")
-      local offline_file="${hspc_path}/sample/${filename%.*}-offline.yaml"
-      log "Creating offline sample manifest: $(basename "$offline_file")"
-      cp "$sample_file" "$offline_file"
-      rewrite_images "$offline_file"
+  local sample_files
+  if [[ -d "${hspc_path}/sample/config" ]]; then
+    sample_files="${hspc_path}/sample/config/hspc-k8s"*.yaml
+    for sample_file in $sample_files; do
+      if [[ -f "$sample_file" ]]; then
+        # Skip already generated offline manifests
+        [[ "$sample_file" == *-offline.yaml ]] && continue
+        local filename=$(basename "$sample_file")
+        local offline_file="${hspc_path}/sample/config/${filename%.*}-offline.yaml"
+        log "Creating offline sample manifest: $(basename "$offline_file")"
+        cp "$sample_file" "$offline_file"
+        rewrite_images "$offline_file"
+      fi
+    done
+    if [[ -f "${hspc_path}/sample/openshift/consoleplugin-ocp-ui.yaml" ]]; then
+      local consoleplugin_file="${hspc_path}/sample/openshift/consoleplugin-ocp-ui.yaml"
+      local consoleplugin_offline_file="${hspc_path}/sample/openshift/consoleplugin-ocp-ui-offline.yaml"
+      log "Creating offline sample manifest: consoleplugin-ocp-ui-offline.yaml"
+      cp "$consoleplugin_file" "$consoleplugin_offline_file"
+      rewrite_images "$consoleplugin_offline_file"
     fi
-  done
+  else
+    sample_files="${hspc_path}/sample/hspc-k8s"*.yaml
+    for sample_file in $sample_files; do
+      if [[ -f "$sample_file" ]]; then
+        # Skip already generated offline manifests
+        [[ "$sample_file" == *-offline.yaml ]] && continue
+        local filename=$(basename "$sample_file")
+        local offline_file="${hspc_path}/sample/${filename%.*}-offline.yaml"
+        log "Creating offline sample manifest: $(basename "$offline_file")"
+        cp "$sample_file" "$offline_file"
+        rewrite_images "$offline_file"
+      fi
+    done
+  fi
 
   log "--- Manifest files updated successfully ---"
 }
@@ -643,7 +681,11 @@ create_offline_crd() {
   local sample_offline_file
   if [[ -n "$k8s_version" ]]; then
     # Specific k8s version provided, look for matching offline file
-    sample_offline_file="${hspc_path}/sample/hspc-k8s${k8s_version}-offline.yaml"
+    if [[ -f "${hspc_path}/sample/config/hspc-k8s${k8s_version}-offline.yaml" ]]; then
+      sample_offline_file="${hspc_path}/sample/config/hspc-k8s${k8s_version}-offline.yaml"
+    else
+      sample_offline_file="${hspc_path}/sample/hspc-k8s${k8s_version}-offline.yaml"
+    fi
     if [[ ! -f "$sample_offline_file" ]]; then
       log "Warning: Offline sample manifest not found for k8s version $k8s_version: $sample_offline_file"
       return
