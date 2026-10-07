@@ -72,7 +72,7 @@
 #===============================================================================
 
 # --- Script version ---
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="3.19.0"
 
 # --- Supported plugins ---
 SUPPORTED_PLUGINS=("hspc" "hspp" "hrpc")
