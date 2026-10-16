@@ -20,12 +20,25 @@ The overall process involves the following steps:
 
 # Prerequisites
 
-* **Linux system**: with internet access, docker or podman, and Git
-  * Make sure port 443 is open and this system has access to the following :
-    For HSPC/HRPC:
-    * github.com
-    * registry.hitachivantara.com
-    * registry.k8s.io
+* **Linux system**: A Linux system with internet access, Docker or Podman installed, and Git available.
+    * Ensure that **port 443** is open and that the system can access the following resources: :
+      For HSPC/HRPC:
+        * GitHub (github.com)
+        * registry.hitachivantara.com
+        * registry.k8s.io
+        * **Image Signature Validation**: If image signature validation is enabled on the OpenShift cluster, verify that the following entries exist in `/etc/containers/registries.d/default.yaml` on the Linux system before running the script.
+          When configured, the `skopeo` tool automatically copies the available `.sig` files along with the container images.
+
+          ```yaml
+          docker:
+            registry.hitachivantara.com:
+              use-sigstore-attachments: true
+            registry.k8s.io:
+              use-sigstore-attachments: true
+            k8s-registry.scelab.local:
+              use-sigstore-attachments: true
+          ```
+      * **Container Registry Authentication**: Before pushing the generated images, authenticate with the required private container registry and Red Hat registry using the appropriate credentials. This ensures the required permissions are available and helps prevent authentication or authorization errors during the image push operation.  
 
     For HSPP, access to the following is also required:
     * quay.io
