@@ -1,0 +1,143 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Static Provisioning (VSP)
+# Kind: PersistentVolume, Name: pv-static-sample; Kind: PersistentVolumeClaim, Name: pvc-static-sample
+# =============================================================================
+#
+# Purpose:
+#   Imports an LDEV that already exists on a Hitachi VSP or VSP One Block
+#   storage system into Kubernetes or OpenShift. A PersistentVolume (PV) is
+#   defined manually and pre-bound to a PersistentVolumeClaim (PVC).
+#
+# Prerequisites:
+#   1. Supported storage systems: Hitachi VSP family and VSP One Block.
+#   2. secret-sample.yaml and sc-sample.yaml are applied.
+#   3. The LDEV exists and has the Dynamic Provisioning (DP) attribute.
+#   4. The LDEV is not mapped to a port (host group or iSCSI target).
+#   5. No copy pairs are formed on the LDEV.
+#   6. If the LDEV already contains data, its filesystem matches fsType.
+#   7. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#      Before applying, replace the following values (obtain them from the
+#      storage system management software):
+#        <storage-device-ID>  12-digit ID: <6-digit model prefix><6-digit
+#                             serial number>
+#        <LDEV-ID>            LDEV ID in decimal.
+#        <LDEV-nickname>      LDEV nickname, in the format
+#                             spc-<10-digit hexadecimal number>
+#                             (for example, spc-0123456789).
+#        ports / portIPs      Storage ports connected to the worker nodes.
+#
+# Notes:
+#   • In static provisioning, the administrator creates the PV for an
+#     existing volume. The CSI driver does not create the volume.
+#   • Pods use the PVC like any dynamically provisioned PVC.
+#   • A PersistentVolume is cluster-scoped; a PVC is namespaced.
+#   • accessModes, volumeMode, and storageClassName must match in the PV
+#     and the PVC.
+#   • Use persistentVolumeReclaimPolicy: Retain so that the existing LDEV
+#     and its data are not deleted when the PVC is deleted.
+#   • ReadWriteMany is supported only with volumeMode: Block.
+#
+# Resource flow:
+#   LDEV (existing) --> pv-static-sample --> pvc-static-sample --> Pod
+#
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  # Name of the PV. Referenced by spec.volumeName of the PVC below.
+  # PVs are cluster-scoped, so no namespace is set.
+  name: pv-static-sample
+  annotations:
+    # CSI driver that manages this volume.
+    pv.kubernetes.io/provisioned-by: hspc.csi.hitachi.com
+spec:
+  # Access mode. Must match the PVC.
+  # Values: ReadWriteOnce   - read-write by a single node
+  #         ReadOnlyMany    - read-only by multiple nodes
+  #         ReadWriteMany   - read-write by multiple nodes (Block only)
+  accessModes:
+    - ReadWriteOnce
+  # Volume mode. Must match the PVC.
+  # Values: Filesystem (default) - mounted with the fsType below
+  #         Block                - exposed as a raw block device
+  volumeMode: Filesystem
+  capacity:
+    # Must be equal to the actual LDEV size.
+    storage: 10Gi
+  # What happens to the PV and the LDEV when the PVC is deleted.
+  # Values: Retain (recommended) - the PV and the LDEV are kept
+  #         Delete               - the PV and the LDEV are deleted
+  persistentVolumeReclaimPolicy: Retain
+  # StorageClass name. Must match the PVC.
+  storageClassName: sc-sample
+  # Pre-binds this PV to the PVC below.
+  claimRef:
+    # Name and namespace of the PVC.
+    name: pvc-static-sample
+    namespace: default
+  csi:
+    # CSI driver name.
+    driver: hspc.csi.hitachi.com
+    # Filesystem type. Ignored when volumeMode is Block.
+    # Values: ext4 | xfs
+    fsType: ext4
+    # Volume identifier on the storage system.
+    # Format: 01--<IO-protocol>--<storage-device-ID>--<LDEV-ID>--<LDEV-nickname>
+    #   <IO-protocol>: scsi - connectionType fc or iscsi
+    #                  nvme - connectionType nvme-fc or nvme-tcp
+    volumeHandle: 01--scsi--<storage-device-ID>--<LDEV-ID>--<LDEV-nickname>
+    volumeAttributes:
+      # Connection type between the storage system and the nodes.
+      # Values: fc | iscsi | nvme-fc | nvme-tcp
+      connectionType: iscsi
+      # Storage port IDs, comma-separated for multipath.
+      # Required when connectionType is fc or iscsi.
+      ports: CL1-A,CL2-A
+      # Storage port IP addresses, comma-separated for multipath.
+      # Required when connectionType is iscsi.
+      portIPs: 172.25.0.16,172.25.0.17
+      # NVM subsystem ID on the storage system.
+      # Required only when connectionType is nvme-fc or nvme-tcp.
+      # nvmSubsystemID: "2"
+    # Secrets that hold the storage credentials (see secret-sample.yaml).
+    # Secret used during ControllerPublishVolume/ControllerUnpublishVolume.
+    controllerPublishSecretRef:
+      name: secret-sample
+      namespace: default
+    # Secret used during ControllerExpandVolume.
+    controllerExpandSecretRef:
+      name: secret-sample
+      namespace: default
+    # Secret used during NodeStageVolume/NodeUnstageVolume.
+    nodeStageSecretRef:
+      name: secret-sample
+      namespace: default
+    # Secret used during NodePublishVolume.
+    nodePublishSecretRef:
+      name: secret-sample
+      namespace: default
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name of the PVC. Must match spec.claimRef.name of the PV above.
+  name: pvc-static-sample
+  # Namespace of the PVC. Must match spec.claimRef.namespace of the PV
+  # above. Pods that use this PVC must be in the same namespace.
+  namespace: default
+spec:
+  # Access mode. Must match the PV.
+  accessModes:
+    - ReadWriteOnce
+  # Volume mode. Must match the PV.
+  volumeMode: Filesystem
+  resources:
+    requests:
+      # Requested capacity. Must be equal to the PV capacity.
+      storage: 10Gi
+  # StorageClass name. Must match the PV.
+  storageClassName: sc-sample
+  # Name of the PV to bind to.
+  volumeName: pv-static-sample

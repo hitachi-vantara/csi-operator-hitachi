@@ -1,0 +1,134 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Static Provisioning (SDS)
+# Kind: PersistentVolume, Name: pv-static-sds-sample; 
+# Kind: PersistentVolumeClaim, Name: pvc-static-sds-sample
+# =============================================================================
+#
+# Purpose:
+#   Imports a volume that already exists on VSP One SDS Block into
+#   Kubernetes or OpenShift. A PersistentVolume (PV) is defined manually and
+#   pre-bound to a PersistentVolumeClaim (PVC).
+#
+# Prerequisites:
+#   1. Supported storage system: Hitachi VSP One SDS Block.
+#   2. secret-sample.yaml and sc-sample-vsp-one-sds-block.yaml are applied.
+#   3. The volume exists, and its volumeType is Normal.
+#   4. The volume is not attached to any compute node.
+#   5. If the volume already contains data, its filesystem matches fsType.
+#   6. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#      Before applying, replace the following values (obtain them from the
+#      VSP One SDS Block management software):
+#        <volume-naaId>   naaId of the target volume (shown in the volume
+#                         information).
+#        <volume-name>    Name of the target volume, in the format
+#                         spc-<10-digit hexadecimal number>
+#                         (for example, spc-0123456789).
+#        <volume-id>      ID of the target volume.
+#
+# Notes:
+#   • In static provisioning, the administrator creates the PV for an
+#     existing volume. The CSI driver does not create the volume.
+#   • Pods use the PVC like any dynamically provisioned PVC.
+#   • A PersistentVolume is cluster-scoped; a PVC is namespaced.
+#   • accessModes, volumeMode, and storageClassName must match in the PV
+#     and the PVC.
+#   • Use persistentVolumeReclaimPolicy: Retain so that the existing volume
+#     and its data are not deleted when the PVC is deleted.
+#   • ReadWriteMany is supported only with volumeMode: Block.
+#
+# Resource flow:
+#   SDS volume (existing) --> pv-static-sds-sample --> pvc-static-sds-sample
+#   --> Pod
+#
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  # Name of the PV. Referenced by spec.volumeName of the PVC below.
+  # PVs are cluster-scoped, so no namespace is set.
+  name: pv-static-sds-sample
+  annotations:
+    # CSI driver that manages this volume.
+    pv.kubernetes.io/provisioned-by: hspc.csi.hitachi.com
+spec:
+  # Access mode. Must match the PVC.
+  # Values: ReadWriteOnce   - read-write by a single node
+  #         ReadOnlyMany    - read-only by multiple nodes
+  #         ReadWriteMany   - read-write by multiple nodes (Block only)
+  accessModes:
+    - ReadWriteOnce
+  # Volume mode. Must match the PVC.
+  # Values: Filesystem (default) - mounted with the fsType below
+  #         Block                - exposed as a raw block device
+  volumeMode: Filesystem
+  capacity:
+    # Must be equal to the actual volume size.
+    storage: 1Gi
+  # What happens to the PV and the volume when the PVC is deleted.
+  # Values: Retain (recommended) - the PV and the volume are kept
+  #         Delete               - the PV and the volume are deleted
+  persistentVolumeReclaimPolicy: Retain
+  # StorageClass name. Must match the PVC.
+  storageClassName: sc-sample-vsp-one-sds-block
+  # Pre-binds this PV to the PVC below.
+  claimRef:
+    # Name and namespace of the PVC.
+    name: pvc-static-sds-sample
+    namespace: default
+  csi:
+    # CSI driver name.
+    driver: hspc.csi.hitachi.com
+    # Filesystem type. Ignored when volumeMode is Block.
+    # Values: ext4 | xfs
+    fsType: ext4
+    # Volume identifier on VSP One SDS Block.
+    # Format: <volume-naaId>--<volume-name>--<volume-id>
+    volumeHandle: <volume-naaId>--<volume-name>--<volume-id>
+    volumeAttributes:
+      # Connection type between the storage system and the nodes.
+      # Values: fc | iscsi | nvme-tcp
+      connectionType: iscsi
+      # Storage type. Must be vsp-one-sds-block for VSP One SDS Block.
+      storageType: vsp-one-sds-block
+    # Secrets that hold the storage credentials (see secret-sample.yaml).
+    # Secret used during ControllerPublishVolume/ControllerUnpublishVolume.
+    controllerPublishSecretRef:
+      name: secret-sample
+      namespace: default
+    # Secret used during ControllerExpandVolume.
+    controllerExpandSecretRef:
+      name: secret-sample
+      namespace: default
+    # Secret used during NodeStageVolume/NodeUnstageVolume.
+    nodeStageSecretRef:
+      name: secret-sample
+      namespace: default
+    # Secret used during NodePublishVolume.
+    nodePublishSecretRef:
+      name: secret-sample
+      namespace: default
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name of the PVC. Must match spec.claimRef.name of the PV above.
+  name: pvc-static-sds-sample
+  # Namespace of the PVC. Must match spec.claimRef.namespace of the PV
+  # above. Pods that use this PVC must be in the same namespace.
+  namespace: default
+spec:
+  # Access mode. Must match the PV.
+  accessModes:
+    - ReadWriteOnce
+  # Volume mode. Must match the PV.
+  volumeMode: Filesystem
+  resources:
+    requests:
+      # Requested capacity. Must be equal to the PV capacity.
+      storage: 1Gi
+  # StorageClass name. Must match the PV.
+  storageClassName: sc-sample-vsp-one-sds-block
+  # Name of the PV to bind to.
+  volumeName: pv-static-sds-sample

@@ -1,0 +1,77 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Pod with Raw Block Volume
+# Kind: Pod, Name: pod-block-sample
+# =============================================================================
+#
+# Purpose:
+#   Creates a Pod that attaches the raw block volume provisioned by the
+#   "pvc-block-sample" PersistentVolumeClaim (PVC) as the /dev/xvda device.
+#   Use this sample to confirm that a raw block volume from "sc-sample" is
+#   provisioned and attached to a node, or as a starting point for an
+#   application Pod.
+#
+# Prerequisites:
+#   1. pvc-block-sample.yaml (volumeMode: Block) is applied, and the PVC
+#      is Bound.
+#   2. The Pod and the PVC are in the same namespace.
+#   3. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • Raw block volumes are attached by using volumeDevices, not
+#     volumeMounts.
+#   • The devicePath value is a path inside the container only.
+#   • The security context applies the default seccomp profile, prevents
+#     privilege escalation, and drops all Linux capabilities. It meets the
+#     Kubernetes "baseline" Pod Security Standard.
+#   • Deleting the Pod does not delete the PVC or the data on the volume.
+#
+# Resource flow:
+#   sc-sample --> pvc-block-sample --> pod-block-sample (/dev/xvda)
+#
+# =============================================================================
+
+apiVersion: v1
+kind: Pod
+metadata:
+  # Name of the Pod.
+  name: pod-block-sample
+  # Namespace of the Pod. Must match the namespace of the PVC.
+  namespace: default
+spec:
+  # Pod-level security settings.
+  securityContext:
+    # Applies the default seccomp profile of the container runtime.
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: my-busybox
+      # Container image. Replace with your application image.
+      image: busybox
+      # Image pull policy.
+      # Values: IfNotPresent (default) - pulls the image only if it is not
+      #                                  present on the node
+      #         Always                 - pulls the image every time the
+      #                                  container starts
+      #         Never                  - uses only the image present on
+      #                                  the node
+      imagePullPolicy: IfNotPresent
+      # Keeps the container running so that you can inspect the device.
+      # Remove this line when you use your application image.
+      command: ["sleep", "1000000"]
+      # Container-level security settings.
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      # Raw block volumes use volumeDevices, not volumeMounts.
+      volumeDevices:
+        # Name of the volume defined in spec.volumes.
+        - name: sample-volume
+          # Device path in the container.
+          devicePath: /dev/xvda
+  volumes:
+    - name: sample-volume
+      persistentVolumeClaim:
+        # PVC that provides the raw block volume (volumeMode: Block).
+        claimName: pvc-block-sample
