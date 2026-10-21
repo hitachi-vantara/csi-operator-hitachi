@@ -1,0 +1,64 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Image Signature Verification Policy
+# Kind: ClusterImagePolicy, Name: hitachi-cip
+# =============================================================================
+#
+# Purpose:
+#   Configures OpenShift Container Platform to verify the signatures of HSPC
+#   images pulled from GitHub Container Registry (ghcr.io) by using the
+#   Hitachi Vantara public key.
+#
+# Prerequisites:
+#   1. Supported platform: OpenShift Container Platform with the
+#      ClusterImagePolicy API (config.openshift.io/v1) available.
+#   2. Applying a ClusterImagePolicy triggers a rolling update of the
+#      MachineConfigPools, and nodes may reboot. Schedule the change in a
+#      maintenance window.
+#   3. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#      Before applying:
+#        a. Download the Hitachi Vantara public key (HV_PK.pem) from
+#           https://github.com/hitachi-vantara/csi-operator-hitachi/tree/main/digital_signature
+#        b. Encode the key and paste the output into publicKey.keyData:
+#             base64 -w0 HV_PK.pem
+#        c. If you mirror the images to a private registry, update scopes
+#           to the mirror location.
+#
+# Notes:
+#   • Images in the listed scopes that are not signed with the Hitachi
+#     Vantara key are rejected by the nodes.
+#   • matchPolicy: MatchRepository accepts a signature whose identity
+#     matches the repository of the image, regardless of the tag.
+#   • ClusterImagePolicy is cluster-scoped, so no namespace is set.
+#
+# Resource flow:
+#   HV_PK.pem --> hitachi-cip --> MachineConfigPools --> node image
+#   verification for ghcr.io/hitachi-vantara/hitachicsi-oci-oss/
+#
+# =============================================================================
+
+apiVersion: config.openshift.io/v1
+kind: ClusterImagePolicy
+metadata:
+  # Name of the policy.
+  name: hitachi-cip
+spec:
+  # Image repositories covered by this policy (ghcr.io).
+  scopes:
+    - ghcr.io/hitachi-vantara/hitachicsi-oci-oss/hspc-operator
+    - ghcr.io/hitachi-vantara/hitachicsi-oci-oss/hspc-config-operator
+    - ghcr.io/hitachi-vantara/hitachicsi-oci-oss/hspc-csi-driver
+    - ghcr.io/hitachi-vantara/hitachicsi-oci-oss/hspc-csi-telemetry-service
+    # Below repositories required for HitachiCSI Console UI Plugin
+    - ghcr.io/hitachi-vantara/hitachicsi-oci-oss/hv-ocp-ui
+    - ghcr.io/hitachi-vantara/hitachicsi-oci-oss/hv-ocp-bff
+  policy:
+    rootOfTrust:
+      # Signatures are verified against a public key.
+      policyType: PublicKey
+      publicKey:
+        # Base64-encoded Hitachi Vantara public key (base64 -w0 HV_PK.pem).
+        keyData: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0NCk1JSUJvakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBWThBTUlJQmlnS0NBWUVBNXRxTnNWdGZjbEY0N01GZUVYdFINCk9VTENsdDFqT1NqenZxb1pHeC9kWjRrMDZXTG9WQlBoM1NIL080ZkpWVHJHVXMzeFlqdzZ2dU9xclM0ZGlRNnINCmNKVnlaSThPZGxkOStWb2V0dnNUeGVpeXp3K1MrQUx3SWYzSE1ZdDZsYU96Ymo0c3diVVNGYlBRL090dmlQRlUNClRiTk5EbkNTZ0tPTytBc0RwZ1U2YXdkdTkvZmF0NURiTGVQejBUaW1jbGVMUHAvMGVYRVh0Ym5pZnZicGoxdnANCnJLZ1dNUk9hT3VSNWo2Z2U1MU1mYTVWN0R6NlJmaUlhQ01TRHZHRFZFWFZESm84anpibG0xc0FWNnIwYTBCMFgNCnhCWE14VnZIMmpiRkVJWWxoS0JnSDh6czZEbjNEMW9zakt5bVdrYjhBTjUxZkRzTEJ6YzZpTXVrV05yOE1QMmwNCjBWTXBCV0FJUWw2ZmNjTm9mUmgxV1dDd1FzWnZhNlQzeW9vQWVpekRWcldSSXpHeEVMNkJ5azJLT2M4VVNSOWQNCjZxUERPaHZIVmc1YkdQZmZVdW1rOVRUZXNxcDdQRW1pYlo2NjJENDcxOEh5QkNpOEtPMzZ2WU1ORXhIWmVLSTQNCkdGaVBlMUFKOEtoVzdVUU1uUUpmanBpa2E1NUJQWE1qWWJCNU15Tkx0dlBUQWdNQkFBRT0NCi0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQ==
+    signedIdentity:
+      # Accepts signatures whose identity matches the image repository.
+      matchPolicy: MatchRepository

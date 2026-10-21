@@ -1,0 +1,93 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Immutable VolumeSnapshotClass (advanced)
+# Kind: VolumeSnapshotClass, Name: snapshotclass-sample
+# =============================================================================
+#
+# Purpose:
+#   Defines a VolumeSnapshotClass that HSPC uses to create immutable
+#   VolumeSnapshots. A snapshot created from this class is protected from
+#   modification for the configured retention period.
+#
+# Prerequisites:
+#   1. Supported storage systems: Hitachi VSP One Block B20 series and
+#      VSP One Block B85 only. Do not use this class with other storage
+#      systems.
+#   2. HSPC is installed and running.
+#   3. The Kubernetes external-snapshotter CRDs and snapshot controller are
+#      installed.
+#   4. secret-sample.yaml is applied before any VolumeSnapshot uses this
+#      class.
+#   5. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#      Before applying, replace poolID, serialNumber, retentionPeriod, and
+#      the Secret details with values for your environment.
+#
+# Notes:
+#   • After a retention period is set, the snapshot data is protected from
+#     any update until the period expires.
+#   • While the retention period is active, the snapshot cannot be updated,
+#     deleted, or cloned.
+#   • With deletionPolicy: Delete, the storage system rejects deletion while
+#     the retention period is active. Deletion succeeds only after the
+#     period expires.
+#   • When the retention period ends, the storage system automatically
+#     disables the data retention setting for the pair, and the snapshot
+#     behaves like a standard (mutable) snapshot.
+#   • Choose retentionPeriod carefully. Until it expires, you cannot delete
+#     or clone the snapshot.
+#
+# Resource flow:
+#   snapshotclass-sample --> snapshot-sample (immutable) -->
+#   pvc-from-snapshot-sample
+#
+# =============================================================================
+
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  # Name of the VolumeSnapshotClass. VolumeSnapshot objects reference it
+  # through spec.volumeSnapshotClassName.
+  name: snapshotclass-sample
+
+# -----------------------------------------------------------------------------
+# CSI driver
+# -----------------------------------------------------------------------------
+# CSI driver that creates and manages snapshots for this class.
+# For HSPC, the value must be hspc.csi.hitachi.com.
+driver: hspc.csi.hitachi.com
+
+# -----------------------------------------------------------------------------
+# Deletion policy
+# -----------------------------------------------------------------------------
+# Controls what happens to the snapshot on the storage system when the
+# VolumeSnapshot object is deleted.
+#   Delete : The snapshot on the storage system is also deleted (after the
+#            retention period expires).
+#   Retain : The snapshot on the storage system is kept.
+deletionPolicy: Delete
+
+# -----------------------------------------------------------------------------
+# Driver-specific parameters
+# -----------------------------------------------------------------------------
+parameters:
+  # ID of the storage pool used for the snapshot. Use the same poolID as the
+  # StorageClass. (Required)
+  poolID: "1"
+
+  # Serial number of the storage system that holds the source volume. The
+  # storage system must be a VSP One Block B20 series or VSP One Block B85
+  # model. (Required)
+  serialNumber: "123456"
+
+  # Retention period, in hours, during which the snapshot is immutable.
+  # Setting this parameter enables immutable snapshots.
+  #   Unit          : hours
+  #   Allowed range : 1 - 12288 (12288 hours is 512 days)
+  retentionPeriod: "1"
+
+  # Secret that holds the storage system credentials used by the CSI
+  # snapshotter for snapshot operations. (Required)
+  #   Secret name      : secret-sample
+  #   Secret namespace : default
+  csi.storage.k8s.io/snapshotter-secret-name: "secret-sample"
+  csi.storage.k8s.io/snapshotter-secret-namespace: "default"

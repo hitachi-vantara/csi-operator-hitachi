@@ -1,0 +1,49 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - VolumeSnapshot
+# Kind: VolumeSnapshot, Name: snapshot-sample
+# =============================================================================
+#
+# Purpose:
+#   Creates a point-in-time VolumeSnapshot of the existing
+#   PersistentVolumeClaim "pvc-sample".
+#
+# Prerequisites:
+#   1. The Kubernetes external-snapshotter CRDs and snapshot controller are
+#      installed.
+#   2. volumesnapshotclass-sample.yaml is applied (VolumeSnapshotClass
+#      "snapshotclass-sample").
+#   3. pvc-sample.yaml is applied, and the source PVC is Bound.
+#   4. The VolumeSnapshot and the source PVC are in the same namespace.
+#   5. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • HSPC creates the snapshot on the storage system by using the
+#     parameters and Secret defined in the VolumeSnapshotClass.
+#   • To restore the snapshot, reference it from a PVC dataSource
+#     (see pvc-from-snapshot-sample.yaml):
+#       dataSource:
+#         name: snapshot-sample
+#         kind: VolumeSnapshot
+#         apiGroup: snapshot.storage.k8s.io
+#
+# Resource flow:
+#   pvc-sample --(snapshot)--> snapshot-sample --(restore)-->
+#   pvc-from-snapshot-sample
+#
+# =============================================================================
+
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  # Name of the VolumeSnapshot. Referenced by pvc-from-snapshot-sample.yaml.
+  name: snapshot-sample
+  # Namespace. Must match the namespace of the source PVC.
+  namespace: default
+spec:
+  # VolumeSnapshotClass that defines the CSI driver (hspc.csi.hitachi.com)
+  # and the driver-specific parameters used to create the snapshot.
+  volumeSnapshotClassName: snapshotclass-sample
+  source:
+    # Existing PVC from which the snapshot is created (same namespace).
+    persistentVolumeClaimName: pvc-sample

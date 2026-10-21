@@ -1,0 +1,74 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - VolumeSnapshotClass (basic)
+# Kind: VolumeSnapshotClass, Name: snapshotclass-sample
+# =============================================================================
+#
+# Purpose:
+#   Defines a VolumeSnapshotClass that HSPC uses to create standard
+#   (mutable) VolumeSnapshots.
+#
+# Prerequisites:
+#   1. Supported storage systems: Hitachi VSP One Block and VSP family.
+#   2. HSPC is installed and running.
+#   3. The Kubernetes external-snapshotter CRDs and snapshot controller are
+#      installed.
+#   4. secret-sample.yaml is applied before any VolumeSnapshot uses this
+#      class.
+#   5. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#      Before applying, replace poolID, serialNumber, and the Secret details
+#      with values for your environment.
+#
+# Notes:
+#   • VolumeSnapshots reference this class through
+#     spec.volumeSnapshotClassName.
+#   • HSPC creates the snapshot in the specified pool on the storage system
+#     that holds the source volume.
+#   • All parameter values must be strings, so quote numeric values.
+#
+# Resource flow:
+#   snapshotclass-sample --> snapshot-sample --> pvc-from-snapshot-sample
+#
+# =============================================================================
+
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  # Name of the VolumeSnapshotClass. VolumeSnapshot objects reference it
+  # through spec.volumeSnapshotClassName.
+  name: snapshotclass-sample
+
+# -----------------------------------------------------------------------------
+# CSI driver
+# -----------------------------------------------------------------------------
+# CSI driver that creates and manages snapshots for this class.
+# For HSPC, the value must be hspc.csi.hitachi.com.
+driver: hspc.csi.hitachi.com
+
+# -----------------------------------------------------------------------------
+# Deletion policy
+# -----------------------------------------------------------------------------
+# Controls what happens to the snapshot on the storage system when the
+# VolumeSnapshot object is deleted.
+#   Delete : The snapshot on the storage system is also deleted.
+#   Retain : The snapshot on the storage system is kept.
+deletionPolicy: Delete
+
+# -----------------------------------------------------------------------------
+# Driver-specific parameters
+# -----------------------------------------------------------------------------
+parameters:
+  # ID of the storage pool used for the snapshot. Use the same poolID as the
+  # StorageClass. (Required)
+  poolID: "1"
+
+  # Serial number of the storage system that holds the source volume.
+  # (Required)
+  serialNumber: "123456"
+
+  # Secret that holds the storage system credentials used by the CSI
+  # snapshotter for snapshot operations. (Required)
+  #   Secret name      : secret-sample
+  #   Secret namespace : default
+  csi.storage.k8s.io/snapshotter-secret-name: "secret-sample"
+  csi.storage.k8s.io/snapshotter-secret-namespace: "default"

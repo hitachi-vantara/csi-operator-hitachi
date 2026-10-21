@@ -1,0 +1,56 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Cloned PVC
+# Kind: PersistentVolumeClaim, Name: pvc-from-pvc-sample
+# =============================================================================
+#
+# Purpose:
+#   Creates a new PVC that is a clone of the existing PVC "pvc-sample".
+#
+# Prerequisites:
+#   1. pvc-sample.yaml is applied, and the source PVC is Bound.
+#   2. The clone and the source PVC are in the same namespace.
+#   3. The clone uses the same StorageClass, access mode, and volumeMode
+#      (Filesystem or Block) as the source PVC.
+#   4. The requested capacity is equal to the capacity of the source PVC.
+#   5. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • The clone is provisioned from the source volume. After it is created,
+#     it is a fully independent volume: changes to the clone do not affect
+#     the source, and the source can be deleted without affecting the clone.
+#
+# Resource flow:
+#   pvc-sample --(clone)--> pvc-from-pvc-sample
+#
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name of the cloned PVC.
+  name: pvc-from-pvc-sample
+  # Namespace. Must be the same as the source PVC.
+  namespace: default
+spec:
+  # StorageClass used to provision the clone. Must be the same as the
+  # source PVC.
+  storageClassName: sc-sample
+  # Source volume to clone.
+  dataSource:
+    # PersistentVolumeClaim indicates volume cloning.
+    kind: PersistentVolumeClaim
+    # Name of the existing source PVC (same namespace).
+    name: pvc-sample
+    # Core API group ("" for PersistentVolumeClaim).
+    apiGroup: ""
+  # Access mode. Must be the same as the source PVC.
+  accessModes:
+    - ReadWriteOnce
+  # Volume mode. Must be the same as the source PVC.
+  # Values: Filesystem (default) | Block
+  volumeMode: Filesystem
+  resources:
+    requests:
+      # Must be equal to the source PVC capacity.
+      storage: 1Gi

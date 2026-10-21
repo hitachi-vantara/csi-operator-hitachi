@@ -1,0 +1,18 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: multipath-machineconfig-sample
+  labels:
+    machineconfiguration.openshift.io/role: worker
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+      - contents:
+          source: data:text/plain;charset=utf-8;base64,ZGVmYXVsdHMgewogICAgcG9sbGluZ19pbnRlcnZhbCAgICAgMTAKICAgIHJlY2hlY2tfd3dpZCAgICAgICAgIHllcwogICAgZmluZF9tdWx0aXBhdGhzICAgICAgeWVzCiAgICB1c2VyX2ZyaWVuZGx5X25hbWVzICB5ZXMKICAgIGZsdXNoX29uX2xhc3RfZGVsICAgIHllcwp9CmJsYWNrbGlzdCB7Cn0KZGV2aWNlcyB7CiAgICBkZXZpY2UgewogICAgICAgIHZlbmRvciAgICAgICAgICAgICAgICAgIkhJVEFDSEkiCiAgICAgICAgcHJvZHVjdCAgICAgICAgICAgICAgICAiT1BFTi0uKiIKICAgICAgICBwYXRoX2dyb3VwaW5nX3BvbGljeSAgICJtdWx0aWJ1cyIKICAgICAgICBwYXRoX3NlbGVjdG9yICAgICAgICAgICJyb3VuZC1yb2JpbiAwIgogICAgICAgIHBhdGhfY2hlY2tlciAgICAgICAgICAgInR1ciIKICAgICAgICBmZWF0dXJlcyAgICAgICAgICAgICAgICIwIgogICAgICAgIGhhcmR3YXJlX2hhbmRsZXIgICAgICAgIjAiCiAgICAgICAgZmFpbGJhY2sgICAgICAgICAgICAgICAiaW1tZWRpYXRlIgogICAgICAgIHJyX3dlaWdodCAgICAgICAgICAgICAgInByaW9yaXRpZXMiCiAgICAgICAgbm9fcGF0aF9yZXRyeSAgICAgICAgICBmYWlsCiAgICAgICAgZmFzdF9pb19mYWlsX3RtbyAgICAgICA1CiAgICAgICAgZGV2X2xvc3NfdG1vICAgICAgICAgICAzMAogICAgICAgIGVoX2RlYWRsaW5lICAgICAgICAgICAgMTAKICAgIH0KfQ==
+          verification: {}
+        filesystem: root
+        mode: 400
+        path: /etc/multipath.conf
