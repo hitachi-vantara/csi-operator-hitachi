@@ -1,0 +1,144 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Stretched StorageClass (basic)
+# Kind: StorageClass, Name: sc-sample-stretched
+# =============================================================================
+#
+# Purpose:
+#   Defines a StorageClass that HSPC uses to provision stretched PVCs backed
+#   by a Global-Active Device (GAD) pair between primary and secondary
+#   storage systems.
+#
+# Prerequisites:
+#   1. Supported storage systems: Hitachi VSP One Block and VSP family
+#      storage systems that support GAD.
+#   2. HSPC is installed and running.
+#   3. The quorum disk, remote paths, and virtual storage machine (VSM) are
+#      configured on both storage systems.
+#   4. secret-sample-stretched.yaml is applied before any PVC uses this
+#      StorageClass.
+#   5. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#      Before applying, replace quorumID, the pool IDs, the port IDs, and
+#      the port IP addresses with values for your environment.
+#
+# Notes:
+#   • replicationType: stretched directs HSPC to create a volume on each
+#     storage system and form a GAD pair between them.
+#   • Both volumes are presented to the nodes, so the data remains
+#     accessible if one site becomes unavailable.
+#   • Supported connection types for stretched PVCs: fc and iscsi.
+#
+# Resource flow:
+#   secret-sample-stretched --> sc-sample-stretched --> pvc-stretched-sample
+#   --> Pod
+#
+# =============================================================================
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  # StorageClass name. PVCs reference this name in spec.storageClassName.
+  name: sc-sample-stretched
+  annotations:
+    # Description of the storage provisioner.
+    kubernetes.io/description: Hitachi Storage Plug-in for Containers
+
+# CSI provisioner responsible for creating and managing volumes.
+provisioner: hspc.csi.hitachi.com
+
+# Determines what happens to the PersistentVolume when its PVC is deleted.
+#   Delete: The dynamically provisioned PV and the underlying storage volume
+#           are deleted.
+#   Retain: The PV and the underlying storage volume are retained.
+reclaimPolicy: Delete
+
+# Determines when volume provisioning occurs.
+#   Immediate:            Provisions the volume as soon as the PVC is created.
+#   WaitForFirstConsumer: Provisions the volume when a Pod that uses the PVC
+#                         is scheduled.
+volumeBindingMode: Immediate
+
+# Allows the size of a PVC that uses this StorageClass to be increased.
+allowVolumeExpansion: true
+
+parameters:
+  # ---------------------------------------------------------------------------
+  # Basic storage configuration
+  # ---------------------------------------------------------------------------
+
+  # Connection type between the storage systems and the nodes.
+  # Supported values: fc, iscsi. Default: fc.
+  connectionType: iscsi
+
+  # Filesystem type used when formatting the volume.
+  # Supported values: ext4, xfs. Default: ext4.
+  csi.storage.k8s.io/fstype: ext4
+
+  # ---------------------------------------------------------------------------
+  # Stretched PVC (Global-Active Device) configuration
+  # ---------------------------------------------------------------------------
+
+  # Replication type. "stretched" indicates a stretched PVC (a GAD pair
+  # between the primary and secondary storage systems).
+  replicationType: stretched
+
+  # ID of the quorum disk.
+  quorumID: "30"
+
+  # ---------------------------------------------------------------------------
+  # Primary site storage system configuration
+  # ---------------------------------------------------------------------------
+
+  # Pool ID on the primary storage system.
+  primaryPoolID: "10"
+
+  # Storage port IDs on the primary storage system.
+  # Use a comma separator for multipath (for example, CL1-A,CL2-A).
+  primaryPortID: CL1-A,CL2-A
+
+  # iSCSI port IP addresses on the primary storage system, specified as
+  # comma-separated values. Required only when connectionType is iscsi.
+  primaryPortIP: 172.25.0.16,172.25.0.17
+
+  # ---------------------------------------------------------------------------
+  # Secondary site storage system configuration
+  # ---------------------------------------------------------------------------
+
+  # Pool ID on the secondary storage system.
+  secondaryPoolID: "20"
+
+  # Storage port IDs on the secondary storage system.
+  # Use a comma separator for multipath (for example, CL1-A,CL2-A).
+  secondaryPortID: CL1-A,CL2-A
+
+  # iSCSI port IP addresses on the secondary storage system, specified as
+  # comma-separated values. Required only when connectionType is iscsi.
+  secondaryPortIP: 172.25.1.16,172.25.1.17
+
+  # ---------------------------------------------------------------------------
+  # CSI secret configuration
+  #
+  # Kubernetes Secret used by HSPC for each CSI operation.
+  # In this sample, all CSI operations use the same Secret:
+  #   Secret name      : secret-sample-stretched
+  #   Secret namespace : default
+  # ---------------------------------------------------------------------------
+
+  # Secret used during NodePublishVolume.
+  csi.storage.k8s.io/node-publish-secret-name: "secret-sample-stretched"
+  csi.storage.k8s.io/node-publish-secret-namespace: "default"
+
+  # Secret used during volume provisioning (CreateVolume/DeleteVolume).
+  csi.storage.k8s.io/provisioner-secret-name: "secret-sample-stretched"
+  csi.storage.k8s.io/provisioner-secret-namespace: "default"
+
+  # Secret used during ControllerPublishVolume/ControllerUnpublishVolume.
+  csi.storage.k8s.io/controller-publish-secret-name: "secret-sample-stretched"
+  csi.storage.k8s.io/controller-publish-secret-namespace: "default"
+
+  # Secret used during NodeStageVolume/NodeUnstageVolume.
+  csi.storage.k8s.io/node-stage-secret-name: "secret-sample-stretched"
+  csi.storage.k8s.io/node-stage-secret-namespace: "default"
+
+  # Secret used during ControllerExpandVolume.
+  csi.storage.k8s.io/controller-expand-secret-name: "secret-sample-stretched"
+  csi.storage.k8s.io/controller-expand-secret-namespace: "default"

@@ -1,0 +1,118 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - StorageClass (basic)
+# Kind: StorageClass, Name: sc-sample
+# =============================================================================
+#
+# Purpose:
+#   Defines a StorageClass that HSPC uses to dynamically provision volumes
+#   from an HDP pool on a Hitachi storage system.
+#
+# Prerequisites:
+#   1. Supported storage systems: Hitachi VSP One Block and VSP family.
+#   2. HSPC is installed and running.
+#   3. secret-sample.yaml is applied before any PVC uses this StorageClass.
+#   4. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#      Before applying, replace serialNumber, poolID, portID, portIP, and
+#      connectionType with values for your environment.
+#
+# Notes:
+#   • When a PVC references this StorageClass, HSPC creates an LDEV in the
+#     specified pool and maps it to the node through the listed ports.
+#   • The volume is formatted with csi.storage.k8s.io/fstype when the PVC
+#     uses volumeMode: Filesystem.
+#   • allowVolumeExpansion: true allows PVCs to be resized online.
+#
+# Resource flow:
+#   secret-sample --> sc-sample --> pvc-sample --> pod-sample
+#
+# =============================================================================
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  # StorageClass name. PVCs reference this name in spec.storageClassName.
+  name: sc-sample
+  annotations:
+    # Description of the storage provisioner.
+    kubernetes.io/description: Hitachi Storage Plug-in for Containers
+
+# CSI provisioner responsible for creating and managing volumes.
+provisioner: hspc.csi.hitachi.com
+
+# Determines what happens to the PersistentVolume when its PVC is deleted.
+#   Delete: The dynamically provisioned PV and the underlying storage volume
+#           are deleted.
+#   Retain: The PV and the underlying storage volume are retained.
+reclaimPolicy: Delete
+
+# Determines when volume provisioning occurs.
+#   Immediate:            Provisions the volume as soon as the PVC is created.
+#   WaitForFirstConsumer: Provisions the volume when a Pod that uses the PVC
+#                         is scheduled.
+volumeBindingMode: Immediate
+
+# Allows the size of a PVC that uses this StorageClass to be increased.
+allowVolumeExpansion: true
+
+parameters:
+  # ---------------------------------------------------------------------------
+  # Basic storage configuration
+  # ---------------------------------------------------------------------------
+
+  # Storage system serial number.
+  # Replace this value with the serial number of the target storage system.
+  serialNumber: "123456"
+
+  # HDP (Hitachi Dynamic Provisioning) pool ID from which volumes are
+  # provisioned.
+  poolID: "1"
+
+  # Storage port IDs connected to the nodes.
+  # Use a comma separator for multipath (for example, CL1-A,CL2-A).
+  # Not required when connectionType is nvme-fc or nvme-tcp.
+  portID: CL1-A,CL2-A
+
+  # Connection type between the storage system and the nodes.
+  # Supported values: fc, iscsi, nvme-fc, nvme-tcp. Default: fc.
+  connectionType: iscsi
+
+  # iSCSI port IP addresses, specified as comma-separated values.
+  # Required only when connectionType is iscsi.
+  portIP: 172.25.0.16,172.25.0.17
+
+  # NVM subsystem ID on the storage system.
+  # Required only when connectionType is nvme-fc or nvme-tcp.
+  # nvmSubsystemID: "2"
+
+  # Filesystem type used when formatting the volume.
+  # Supported values: ext4, xfs. Default: ext4.
+  csi.storage.k8s.io/fstype: ext4
+
+  # ---------------------------------------------------------------------------
+  # CSI secret configuration
+  #
+  # Kubernetes Secret used by HSPC for each CSI operation.
+  # In this sample, all CSI operations use the same Secret:
+  #   Secret name      : secret-sample
+  #   Secret namespace : default
+  # ---------------------------------------------------------------------------
+
+  # Secret used during NodePublishVolume.
+  csi.storage.k8s.io/node-publish-secret-name: "secret-sample"
+  csi.storage.k8s.io/node-publish-secret-namespace: "default"
+
+  # Secret used during volume provisioning (CreateVolume/DeleteVolume).
+  csi.storage.k8s.io/provisioner-secret-name: "secret-sample"
+  csi.storage.k8s.io/provisioner-secret-namespace: "default"
+
+  # Secret used during ControllerPublishVolume/ControllerUnpublishVolume.
+  csi.storage.k8s.io/controller-publish-secret-name: "secret-sample"
+  csi.storage.k8s.io/controller-publish-secret-namespace: "default"
+
+  # Secret used during NodeStageVolume/NodeUnstageVolume.
+  csi.storage.k8s.io/node-stage-secret-name: "secret-sample"
+  csi.storage.k8s.io/node-stage-secret-namespace: "default"
+
+  # Secret used during ControllerExpandVolume.
+  csi.storage.k8s.io/controller-expand-secret-name: "secret-sample"
+  csi.storage.k8s.io/controller-expand-secret-namespace: "default"

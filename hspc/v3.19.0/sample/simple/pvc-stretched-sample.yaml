@@ -1,0 +1,49 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Stretched PVC
+# Kind: PersistentVolumeClaim, Name: pvc-stretched-sample
+# =============================================================================
+#
+# Purpose:
+#   Dynamically provisions a stretched volume from "sc-sample-stretched".
+#   The volume is backed by a Global-Active Device (GAD) pair between the
+#   primary and secondary storage systems.
+#
+# Prerequisites:
+#   1. Supported storage systems: Hitachi VSP One Block and VSP family
+#      storage systems that support GAD.
+#   2. secret-sample-stretched.yaml and sc-sample-stretched.yaml are
+#      applied.
+#   3. The primary and secondary storage pools have enough free capacity
+#      for the requested size.
+#   4. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • HSPC creates a volume on each storage system and forms a GAD pair, so
+#     the data remains accessible if one site becomes unavailable.
+#   • Use gadpairaction-sample.yaml to split or resynchronize the GAD pair.
+#
+# Resource flow:
+#   sc-sample-stretched --> pvc-stretched-sample --> Pod
+#
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name of the PVC. Referenced by gadpairaction-sample.yaml.
+  name: pvc-stretched-sample
+  # Namespace of the PVC. Pods that use this PVC must be in the same
+  # namespace.
+  namespace: default
+spec:
+  # Access mode.
+  # Values: ReadWriteOnce   - read-write by a single node
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Requested capacity, in whole units of 1Gi.
+      storage: 1Gi
+  # StorageClass used to provision the volume.
+  storageClassName: sc-sample-stretched

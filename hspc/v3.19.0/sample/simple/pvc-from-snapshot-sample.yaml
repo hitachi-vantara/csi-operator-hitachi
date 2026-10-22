@@ -1,0 +1,58 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - PVC Restored from Snapshot
+# Kind: PersistentVolumeClaim, Name: pvc-from-snapshot-sample
+# =============================================================================
+#
+# Purpose:
+#   Creates a new PVC pre-populated with the data captured in the
+#   VolumeSnapshot "snapshot-sample", restoring the point-in-time content of
+#   the original volume (pvc-sample).
+#
+# Prerequisites:
+#   1. volumesnapshotclass-sample.yaml and volumesnapshot-sample.yaml are
+#      applied, and the VolumeSnapshot is ready to use (READYTOUSE: true).
+#   2. The VolumeSnapshot and the new PVC are in the same namespace.
+#   3. The requested capacity is equal to the snapshot restore size
+#      (status.restoreSize of the VolumeSnapshot).
+#   4. volumeMode matches the original source PVC of the snapshot.
+#   5. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • The restored PVC is an independent volume. The snapshot and the
+#     original PVC are not modified.
+#
+# Resource flow:
+#   pvc-sample --(snapshot)--> snapshot-sample --(restore)-->
+#   pvc-from-snapshot-sample
+#
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name of the restored PVC.
+  name: pvc-from-snapshot-sample
+  # Namespace. Must be the same as the VolumeSnapshot.
+  namespace: default
+spec:
+  # StorageClass used to provision the restored volume.
+  storageClassName: sc-sample
+  # Snapshot to restore from.
+  dataSource:
+    # Name of the VolumeSnapshot (same namespace).
+    name: snapshot-sample
+    # VolumeSnapshot indicates a restore from a snapshot.
+    kind: VolumeSnapshot
+    # API group of the VolumeSnapshot CRD (required).
+    apiGroup: snapshot.storage.k8s.io
+  # Access mode. Must be the same as the original source PVC.
+  accessModes:
+    - ReadWriteOnce
+  # Volume mode. Must be the same as the original source PVC.
+  # Values: Filesystem (default) | Block
+  volumeMode: Filesystem
+  resources:
+    requests:
+      # Must be equal to the snapshot restoreSize.
+      storage: 1Gi

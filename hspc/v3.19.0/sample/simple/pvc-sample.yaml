@@ -1,0 +1,64 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Filesystem PVC
+# Kind: PersistentVolumeClaim, Name: pvc-sample
+# =============================================================================
+#
+# Purpose:
+#   Dynamically provisions a volume from "sc-sample". The volume is
+#   formatted with the StorageClass filesystem type (csi.storage.k8s.io/fstype,
+#   for example ext4 or xfs) and mounted into the Pod.
+#
+# Prerequisites:
+#   1. secret-sample.yaml and sc-sample.yaml are applied.
+#   2. The storage pool (poolID in sc-sample.yaml) has enough free capacity
+#      for the requested size.
+#   3. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • With volumeMode: Filesystem, the application reads and writes files
+#     in a mounted directory. This is the common case for most workloads.
+#   • Pods mount filesystem volumes by using volumeMounts
+#     (see pod-sample.yaml).
+#   • ReadWriteMany is not supported with volumeMode: Filesystem. For
+#     multi-node read-write access, use a raw block volume
+#     (see pvc-block-sample.yaml).
+#
+# Resource flow:
+#   sc-sample --> pvc-sample --> pod-sample (/data)
+#
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name of the PVC. Referenced by pod-sample.yaml.
+  name: pvc-sample
+  # Namespace of the PVC. Pods that use this PVC must be in the same
+  # namespace.
+  namespace: default
+spec:
+  # Access mode.
+  # Values: ReadWriteOnce   - read-write by a single node
+  #         ReadOnlyMany    - read-only by multiple nodes (requires a data
+  #                           source; see pvc-rox-sample.yaml)
+  #         ReadWriteMany   - read-write by multiple nodes (Block only;
+  #                           see pvc-block-sample.yaml)
+  accessModes:
+    - ReadWriteOnce
+  # Volume mode.
+  # Values: Filesystem (default) - formatted with the StorageClass fstype
+  #         Block                - exposed as a raw block device
+  #                                (see pvc-block-sample.yaml)
+  volumeMode: Filesystem
+  resources:
+    requests:
+      # Requested capacity, in whole units of 1Gi.
+      # Range: 1Gi up to the maximum volume (LDEV) size supported by the
+      #        storage system, limited by the free capacity of the pool.
+      # Examples: 1Gi, 2Gi, 100Gi, 1024Gi
+      # The size can be increased later (not decreased) because sc-sample
+      # sets allowVolumeExpansion: true.
+      storage: 1Gi
+  # StorageClass used to provision the volume.
+  storageClassName: sc-sample

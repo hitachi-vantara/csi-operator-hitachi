@@ -1,0 +1,62 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - GAD Pair Action
+# Kind: GadPairAction, Name: gadpairaction-sample
+# =============================================================================
+#
+# Purpose:
+#   Requests HSPC to split or resynchronize the Global-Active Device (GAD)
+#   copy pair that backs a stretched PVC (a PVC created from a StorageClass
+#   with replicationType: stretched).
+#
+# Prerequisites:
+#   1. HSPC is installed and the GadPairAction CRD is registered.
+#   2. secret-sample-stretched.yaml, sc-sample-stretched.yaml, and
+#      pvc-stretched-sample.yaml are applied, and the PVC is Bound.
+#   3. The GadPairAction is created in the same namespace as the
+#      stretched PVC.
+#   4. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • split  - Suspends replication between the primary and secondary
+#              volumes (for example, before maintenance at one site).
+#   • resync - Resumes replication and resynchronizes the pair.
+#   • HSPC uses an action-and-fact model: GadPairAction initiates the
+#     operation, and GadPairActionFact holds the latest GAD pair state.
+#   • The request is handled by hspc-config-operator, which is deployed
+#     automatically with HSPC.
+#
+# Resource flow:
+#   pvc-stretched-sample --> gadpairaction-sample --> GadPairActionFact
+#
+# =============================================================================
+
+apiVersion: csi.hitachi.com/v1
+kind: GadPairAction
+metadata:
+  # Name of the GadPairAction request.
+  name: gadpairaction-sample
+  # Namespace. Must match the namespace of the stretched PVC.
+  namespace: default
+spec:
+  # Operation to perform on the GAD pair.
+  # Values: split | resync
+  action: resync
+
+  # StorageClass of the stretched PVC (replicationType: stretched).
+  storageClassName: sc-sample-stretched
+
+  source:
+    # (Optional) Name of the stretched PVC. If omitted, the pair is
+    # identified by remoteMirrorCopyPairId.
+    persistentVolumeClaimName: pvc-stretched-sample
+
+  # (Optional) Copy pair ID. If omitted, the pair is identified by the
+  # PVC name.
+  # remoteMirrorCopyPairId: <remote-mirror-copy-pair-id>
+
+  retryPolicy:
+    # Maximum number of retries if the operation fails (integer).
+    maxRetries: 2
+    # Interval between retries (for example, 120s or 2m).
+    interval: 120s

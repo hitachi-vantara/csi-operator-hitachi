@@ -1,0 +1,86 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - Pod with Filesystem Volume
+# Kind: Pod, Name: pod-sample
+# =============================================================================
+#
+# Purpose:
+#   Creates a Pod that mounts the filesystem volume provisioned by the
+#   "pvc-sample" PersistentVolumeClaim (PVC) at /data. Use this sample to
+#   confirm that a volume from "sc-sample" is provisioned, attached to a
+#   node, formatted, and mounted, or as a starting point for an
+#   application Pod.
+#
+# Prerequisites:
+#   1. pvc-sample.yaml is applied, and the PVC is Bound.
+#   2. The Pod and the PVC are in the same namespace.
+#   3. On Kubernetes distributions other than OpenShift Container Platform,
+#      if the image runs as root (for example, busybox), set runAsUser to a
+#      non-zero UID before applying.
+#   4. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • Filesystem volumes are mounted by using volumeMounts, not
+#     volumeDevices.
+#   • pvc-sample uses the ReadWriteOnce access mode, so only Pods on a
+#     single node can mount the volume at the same time.
+#   • The security context meets the OpenShift "restricted-v2" security
+#     context constraint (SCC) and the Kubernetes "restricted" Pod Security
+#     Standard. On OpenShift Container Platform, a non-root UID is assigned
+#     automatically.
+#   • Deleting the Pod does not delete the PVC or the data on the volume.
+#
+# Resource flow:
+#   sc-sample --> pvc-sample --> pod-sample (/data)
+#
+# =============================================================================
+
+apiVersion: v1
+kind: Pod
+metadata:
+  # Name of the Pod.
+  name: pod-sample
+  # Namespace of the Pod. Must match the namespace of the PVC.
+  namespace: default
+spec:
+  # Pod-level security settings.
+  securityContext:
+    # Prevents containers from running as UID 0.
+    runAsNonRoot: true
+    # Applies the default seccomp profile of the container runtime.
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: my-busybox
+      # Container image. Replace with your application image.
+      image: busybox
+      # Image pull policy.
+      # Values: IfNotPresent (default) - pulls the image only if it is not
+      #                                  present on the node
+      #         Always                 - pulls the image every time the
+      #                                  container starts
+      #         Never                  - uses only the image present on
+      #                                  the node
+      imagePullPolicy: IfNotPresent
+      # Keeps the container running so that you can inspect the volume.
+      # Remove this line when you use your application image.
+      command: ["sleep", "1000000"]
+      # Container-level security settings.
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      # Filesystem volumes use volumeMounts, not volumeDevices.
+      volumeMounts:
+        # Name of the volume defined in spec.volumes.
+        - name: sample-volume
+          # Path in the container where the filesystem is mounted.
+          mountPath: /data
+          # Mounts the volume as read-only when set to true.
+          # Values: false (default) | true
+          # readOnly: false
+  volumes:
+    - name: sample-volume
+      persistentVolumeClaim:
+        # PVC that provides the filesystem volume (volumeMode: Filesystem).
+        claimName: pvc-sample

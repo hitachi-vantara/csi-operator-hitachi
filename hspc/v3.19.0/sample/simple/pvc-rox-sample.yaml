@@ -1,0 +1,66 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - ReadOnlyMany PVC
+# Kind: PersistentVolumeClaim, Name: pvc-rox-sample
+# =============================================================================
+#
+# Purpose:
+#   Creates a clone of "pvc-sample" that Pods on multiple nodes can mount
+#   read-only at the same time (for example, shared reference data, models,
+#   or static content).
+#
+# Prerequisites:
+#   1. pvc-sample.yaml is applied, and the source PVC is Bound.
+#   2. This PVC and the source PVC are in the same namespace and use the
+#      same StorageClass.
+#   3. The requested capacity is equal to the source PVC capacity.
+#   4. volumeMode matches the source PVC (Filesystem or Block).
+#   5. This is a reference manifest file and must be updated with applicable
+#      values for your environment.
+#
+# Notes:
+#   • A ReadOnlyMany volume must be created from a data source (an existing
+#     PVC, as in this sample, or a VolumeSnapshot).
+#   • Pods that use this PVC should set readOnly: true in volumeMounts.
+#
+# Resource flow:
+#   pvc-sample --(clone)--> pvc-rox-sample --> Pods (read-only, many nodes)
+#
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name of the PVC.
+  name: pvc-rox-sample
+  # Namespace of the PVC. Must match the namespace of the source PVC and
+  # of the Pods that use this PVC.
+  namespace: default
+spec:
+  # Data source that provides the initial content.
+  dataSource:
+    # Kind of the data source.
+    # Values: PersistentVolumeClaim - clone of an existing PVC
+    #         VolumeSnapshot        - restore from a snapshot
+    #                                 (see pvc-from-snapshot-sample.yaml)
+    kind: PersistentVolumeClaim
+    # Name of the source PVC (same namespace).
+    name: pvc-sample
+    # API group of the data source.
+    # Values: ""                      - for PersistentVolumeClaim
+    #         snapshot.storage.k8s.io - for VolumeSnapshot
+    apiGroup: ""
+  # Access mode.
+  # Values: ReadOnlyMany    - read-only by multiple nodes
+  accessModes:
+    - ReadOnlyMany
+  # Volume mode. Must match the source PVC.
+  # Values: Filesystem (default) - formatted with the StorageClass fstype
+  #         Block                - exposed as a raw block device
+  volumeMode: Filesystem
+  resources:
+    requests:
+      # Requested capacity. Must be equal to the source PVC capacity
+      # (pvc-sample: 1Gi).
+      storage: 1Gi
+  # StorageClass used to provision the volume. Same as the source PVC.
+  storageClassName: sc-sample

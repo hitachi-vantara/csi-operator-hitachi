@@ -1,0 +1,838 @@
+# =============================================================================
+# Hitachi Storage Plug-in for Containers (HSPC) - OpenShift Console Plugin
+# Kind: Namespace, Name: hitachi-vantara; 
+# Kind: ConfigMap, Name: console-plugin-ui; 
+# Kind: Deployment, Name: console-plugin-ui; 
+# Kind: Service, Name: console-plugin-ui; 
+# Kind: ServiceAccount, Name: console-plugin-bff; 
+# Kind: ClusterRole, Name: console-plugin-bff; 
+# Kind: ClusterRoleBinding, Name: console-plugin-bff; 
+# Kind: ClusterRole, Name: console-plugin-bff-viewer; 
+# Kind: ClusterRole, Name: console-plugin-bff-admin; 
+# Kind: ClusterRoleBinding, Name: console-plugin-bff-viewer; 
+# Kind: ClusterRoleBinding, Name: console-plugin-bff-admin; 
+# Kind: Service, Name: console-plugin-bff; 
+# Kind: Deployment, Name: console-plugin-bff; 
+# Kind: ConsolePlugin, Name: console-plugin-hitachi-vantara;
+# Kind: ServiceAccount, Name: console-plugin-hitachi-vantara-patcher; 
+# Kind: ClusterRole, Name: console-plugin-hitachi-vantara-patcher; 
+# Kind: ClusterRoleBinding, Name: console-plugin-hitachi-vantara-patcher; 
+# Kind: Job, Name: console-plugin-hitachi-vantara-patcher-3-19-0
+# =============================================================================
+#
+# Purpose:
+#   Deploys the Hitachi Vantara OpenShift Console plugin (version 3.19.0),
+#   which consists of the Console plugin UI and the BFF
+#   (backend-for-frontend) service.
+#
+# Prerequisites:
+#   1. Supported platform: OpenShift Container Platform 4.20 or later.
+#   2. You have cluster-admin privileges to create the cluster-scoped
+#      resources (ClusterRole, ClusterRoleBinding, and ConsolePlugin).
+#   3. This release replaces any previous vsp360-dcm installation; it is not
+#      an overlay on version 3.18.3. When you upgrade from vsp360-dcm or
+#      console-plugin-vsp360-dcm, the patcher Job retires the previous
+#      installation. If the vsp360-dcm namespace remains afterward, inspect
+#      its remaining resources, and then delete it:
+#        oc delete ns vsp360-dcm --ignore-not-found
+#   4. Before you re-apply this file, delete the existing patcher Job:
+#        oc delete job -n hitachi-vantara \
+#          console-plugin-hitachi-vantara-patcher-3-19-0 --ignore-not-found
+#   5. Before applying, review and update the following:
+#        - Images: hv-ocp-ui and hv-ocp-bff.
+#        - plugin-config.json: hrpc.namespace and hsppPrometheus.*.
+#        - BFF container argument --prometheus-url and environment
+#          variables HRPC_NAMESPACE and HSPP_*.
+#        - ClusterRole resourceNames for the HSPP Service, if you rename it.
+#        - ClusterRoleBindings console-plugin-bff-viewer and
+#          console-plugin-bff-admin: replace the placeholder Group subjects
+#          with your identity provider groups, or change kind to User.
+#
+# Notes:
+#   • The Console proxies plugin requests to the BFF through the alias
+#     "backend". The BFF is exposed only as a ClusterIP Service.
+#   • The Console injects the signed-in user's token. The BFF admits a call
+#     only after a TokenReview and a SubjectAccessReview succeed.
+#   • Users with cluster-admin already pass the BFF access check and do not
+#     need the viewer or admin bindings.
+#   • Other users need the viewer role (Health and metrics) or the admin
+#     role (mutating BFF APIs); otherwise, Health and metrics return 403.
+#   • The patcher Job enables the plugin on the cluster Console operator.
+#
+# Resource flow:
+#   hitachi-vantara (Namespace) --> console-plugin-ui and console-plugin-bff
+#   (Deployments and Services) --> console-plugin-hitachi-vantara
+#   (ConsolePlugin) --> patcher Job --> plugin enabled in the Console
+#
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hitachi-vantara
+  labels:
+    app: console-plugin-hitachi-vantara
+    app.kubernetes.io/name: console-plugin-hitachi-vantara
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: console-plugin-ui
+  namespace: hitachi-vantara
+  labels:
+    app: console-plugin-ui
+    app.kubernetes.io/name: console-plugin-ui
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+data:
+  nginx.conf: |
+    error_log /dev/stdout info;
+    events {}
+    http {
+      access_log         /dev/stdout;
+      include            /etc/nginx/mime.types;
+      default_type       application/octet-stream;
+      keepalive_timeout  65;
+      server {
+        listen              9443 ssl;
+        listen              [::]:9443 ssl;
+        ssl_certificate     /var/cert/tls.crt;
+        ssl_certificate_key /var/cert/tls.key;
+        root                /usr/share/nginx/html;
+      }
+    }
+  plugin-config.json: |
+    {
+      "plugins": [
+        {
+          "name": "hitachi-vantara",
+          "enabled": true,
+          "version": "3.19.0",
+          "description": "Hitachi Vantara Openshift Console Plugin"
+        }
+      ],
+      "hrpc": {
+        "namespace": "hspc-replication-operator-system"
+      },
+      "hsppPrometheus": {
+        "namespace": "hspc-monitoring-system",
+        "service": "prometheus",
+        "port": "9090"
+      }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console-plugin-ui
+  namespace: hitachi-vantara
+  labels:
+    app: console-plugin-ui
+    app.kubernetes.io/name: console-plugin-ui
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+    app.openshift.io/runtime-namespace: hitachi-vantara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: console-plugin-ui
+      app.kubernetes.io/name: console-plugin-ui
+  template:
+    metadata:
+      labels:
+        app: console-plugin-ui
+        app.kubernetes.io/name: console-plugin-ui
+        app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+    spec:
+      containers:
+        - name: console-plugin-ui
+          image: ghcr.io/hitachi-vantara/hitachicsi-oci-oss/hv-ocp-ui:v3.19.0
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          volumeMounts:
+            - name: console-plugin-ui-cert
+              readOnly: true
+              mountPath: /var/cert
+            - name: nginx-conf
+              readOnly: true
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: console-plugin-ui-cert
+          secret:
+            secretName: console-plugin-ui-cert
+            defaultMode: 420
+        - name: nginx-conf
+          configMap:
+            name: console-plugin-ui
+            defaultMode: 420
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: console-plugin-ui-cert
+    console.openshift.io/hostname-for-plugin: console-plugin-ui.hitachi-vantara.svc.cluster.local
+  name: console-plugin-ui
+  namespace: hitachi-vantara
+  labels:
+    app: console-plugin-ui
+    app.kubernetes.io/name: console-plugin-ui
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+spec:
+  ports:
+    - name: 9443-tcp
+      protocol: TCP
+      port: 9443
+      targetPort: 9443
+  selector:
+    app: console-plugin-ui
+    app.kubernetes.io/name: console-plugin-ui
+  type: ClusterIP
+  sessionAffinity: None
+
+---
+# BFF — ClusterIP only. Console proxies alias "backend" here.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: console-plugin-bff
+  namespace: hitachi-vantara
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: console-plugin-bff
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+rules:
+  # Pairing kubeconfigs (HRPC namespace is selected by BFF env, not by this rule).
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - remote-kubeconfig
+      - hspc-replication-operator-remote-kubeconfig
+      - hspc-replication-operator-storage-secrets
+    verbs: ["get"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["list"]
+  # HSPP Health. If you rename the Prometheus Service, change resourceNames here
+  # and hsppPrometheus.service in plugin-config.json together.
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames:
+      - prometheus
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames:
+      - storage-exporter
+      - pushgateway
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    resourceNames:
+      - prometheus
+    verbs: ["get"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: console-plugin-bff
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: console-plugin-bff
+subjects:
+  - kind: ServiceAccount
+    name: console-plugin-bff
+    namespace: hitachi-vantara
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: console-plugin-bff-viewer
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+    app.kubernetes.io/component: bff-auth
+rules:
+  # get = Health / DR preflight GETs; create = metrics PromQL POSTs (query / query_range).
+  # Marker SAR is path-wide (not per-route); true mutators still need -admin.
+  - nonResourceURLs:
+      - /console-plugin-bff/api
+      - /console-plugin-bff/api/*
+    verbs: ["get", "create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: console-plugin-bff-admin
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+    app.kubernetes.io/component: bff-auth
+rules:
+  - nonResourceURLs:
+      - /console-plugin-bff/api
+      - /console-plugin-bff/api/*
+    verbs: ["*"]
+
+---
+# Customer edit: non-admin access to the BFF.
+#
+# Console injects the signed-in user's token (UserToken). The BFF admits the
+# call only after TokenReview + SubjectAccessReview on /console-plugin-bff/api.
+# POST maps to RBAC verb "create" (metrics history uses POST).
+#
+# cluster-admin users already succeed: the built-in cluster-admin ClusterRole
+# grants nonResourceURLs ["*"] / verbs ["*"], so they do not need these
+# bindings. Bind the groups/users below for everyone else who should use
+# Health / metrics / DR preflight (viewer) or mutating BFF APIs (admin).
+# Replace the Group names with your IdP groups, or change kind to User.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: console-plugin-bff-viewer
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+    app.kubernetes.io/component: bff-auth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: console-plugin-bff-viewer
+subjects:
+  # Health, metrics history, DR preflight — for non-cluster-admin Console users
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: hitachi-vantara-console-users
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: console-plugin-bff-admin
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+    app.kubernetes.io/component: bff-auth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: console-plugin-bff-admin
+subjects:
+  # Mutating BFF APIs (update/patch/delete and other non-read verbs)
+  # Only needed for non-cluster-admin operators
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: hitachi-vantara-console-admins
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: console-plugin-bff-cert
+  name: console-plugin-bff
+  namespace: hitachi-vantara
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: http
+  selector:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+  type: ClusterIP
+  sessionAffinity: None
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console-plugin-bff
+  namespace: hitachi-vantara
+  labels:
+    app: console-plugin-bff
+    app.kubernetes.io/name: console-plugin-bff
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: console-plugin-bff
+      app.kubernetes.io/name: console-plugin-bff
+  template:
+    metadata:
+      labels:
+        app: console-plugin-bff
+        app.kubernetes.io/name: console-plugin-bff
+        app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+    spec:
+      serviceAccountName: console-plugin-bff
+      containers:
+        - name: console-plugin-bff
+          image: ghcr.io/hitachi-vantara/hitachicsi-oci-oss/hv-ocp-bff:v3.19.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --mode=bff
+            - --auth-mode=sa
+            - --auth-marker-path=/console-plugin-bff/api
+            # Must match hsppPrometheus in plugin-config.json
+            - --prometheus-url=http://prometheus.hspc-monitoring-system.svc:9090
+            - --tls-cert=/var/serving-cert/tls.crt
+            - --tls-key=/var/serving-cert/tls.key
+          env:
+            # Must match hrpc.namespace / hsppPrometheus in plugin-config.json
+            - name: HRPC_NAMESPACE
+              value: hspc-replication-operator-system
+            - name: HSPP_PROMETHEUS_NAMESPACE
+              value: hspc-monitoring-system
+            - name: HSPP_PROMETHEUS_SERVICE
+              value: prometheus
+            - name: HSPP_PROMETHEUS_PORT
+              value: "9090"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+              scheme: HTTPS
+          volumeMounts:
+            - name: serving-cert
+              mountPath: /var/serving-cert
+              readOnly: true
+      volumes:
+        - name: serving-cert
+          secret:
+            secretName: console-plugin-bff-cert
+            defaultMode: 420
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+
+---
+apiVersion: console.openshift.io/v1
+kind: ConsolePlugin
+metadata:
+  name: console-plugin-hitachi-vantara
+  labels:
+    app: console-plugin-ui
+    app.kubernetes.io/name: console-plugin-ui
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+spec:
+  displayName: Hitachi Vantara Openshift Console Plugin
+  i18n:
+    loadType: Preload
+  backend:
+    type: Service
+    service:
+      name: console-plugin-ui
+      namespace: hitachi-vantara
+      port: 9443
+      basePath: /
+  proxy:
+    - alias: backend
+      authorization: UserToken
+      endpoint:
+        type: Service
+        service:
+          name: console-plugin-bff
+          namespace: hitachi-vantara
+          port: 8080
+
+---
+# Patcher: enables the plugin on the cluster Console operator.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: console-plugin-hitachi-vantara-patcher
+  namespace: hitachi-vantara
+  labels:
+    app: console-plugin-hitachi-vantara
+    app.kubernetes.io/name: console-plugin-hitachi-vantara
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: console-plugin-hitachi-vantara-patcher
+  labels:
+    app: console-plugin-hitachi-vantara
+    app.kubernetes.io/name: console-plugin-hitachi-vantara
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+rules:
+  - apiGroups: ["operator.openshift.io"]
+    resources: ["consoles"]
+    verbs: ["get", "list", "patch", "update"]
+  - apiGroups: ["console.openshift.io"]
+    resources: ["consoleplugins"]
+    resourceNames: ["console-plugin-vsp360-dcm"]
+    verbs: ["get", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "clusterrolebindings"]
+    resourceNames: ["console-plugin-vsp360-dcm-patcher"]
+    verbs: ["get", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    resourceNames: ["vsp360-dcm"]
+    verbs: ["get", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    resourceNames: ["hitachi-vantara"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+  - apiGroups: ["", "apps", "batch", "route.openshift.io", "networking.k8s.io", "rbac.authorization.k8s.io"]
+    resources:
+      - pods
+      - services
+      - configmaps
+      - secrets
+      - serviceaccounts
+      - persistentvolumeclaims
+      - events
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - jobs
+      - cronjobs
+      - routes
+      - ingresses
+      - networkpolicies
+      - roles
+      - rolebindings
+    verbs: ["get", "list", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: console-plugin-hitachi-vantara-patcher
+  labels:
+    app: console-plugin-hitachi-vantara
+    app.kubernetes.io/name: console-plugin-hitachi-vantara
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: console-plugin-hitachi-vantara-patcher
+subjects:
+  - kind: ServiceAccount
+    name: console-plugin-hitachi-vantara-patcher
+    namespace: hitachi-vantara
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: console-plugin-hitachi-vantara-patcher-3-19-0
+  namespace: hitachi-vantara
+  labels:
+    app: console-plugin-hitachi-vantara
+    app.kubernetes.io/name: console-plugin-hitachi-vantara
+    app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+spec:
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        app: console-plugin-hitachi-vantara
+        app.kubernetes.io/name: console-plugin-hitachi-vantara
+        app.kubernetes.io/part-of: console-plugin-hitachi-vantara
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: console-plugin-hitachi-vantara-patcher
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 400
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: console-plugin-hitachi-vantara-patcher
+          image: registry.redhat.io/openshift4/ose-tools-rhel8@sha256:f8d9816fd9450410c91c350cce71e6a9ca7d5d75ab438d5dd3d28ba7771f0422
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          env:
+            - name: NEW_PLUGIN
+              value: "console-plugin-hitachi-vantara"
+            - name: OLD_PLUGIN
+              value: "console-plugin-vsp360-dcm"
+            - name: OLD_NS
+              value: "vsp360-dcm"
+            - name: NEW_NS
+              value: "hitachi-vantara"
+            - name: OLD_HELM_RELEASE
+              value: "vsp360-dcm-plugin"
+            - name: RETIRE_VSP360_RUN
+              value: "1"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              #!/usr/bin/env bash
+              # Source of truth for retiring console-plugin-vsp360-dcm / namespace vsp360-dcm.
+              # Safe to source (defines functions only unless RETIRE_VSP360_RUN=1).
+              set -euo pipefail
+
+              NEW_PLUGIN="${NEW_PLUGIN:-console-plugin-hitachi-vantara}"
+              OLD_PLUGIN="${OLD_PLUGIN:-console-plugin-vsp360-dcm}"
+              OLD_NS="${OLD_NS:-vsp360-dcm}"
+              NEW_NS="${NEW_NS:-hitachi-vantara}"
+              OLD_HELM_RELEASE="${OLD_HELM_RELEASE:-vsp360-dcm-plugin}"
+              OLD_PATCHER="${OLD_PATCHER:-console-plugin-vsp360-dcm-patcher}"
+              # Do not use `oc delete all`. On OpenShift, `all` expands to CRDs
+              # (kubevirt, imagestreams, buildconfigs, ...) this Job cannot list.
+              RETIRE_NS_KINDS="${RETIRE_NS_KINDS:-deploy,sts,ds,job,cronjob,pod,rs,svc,cm,secret,pvc,route,ingress,role,rolebinding,sa,networkpolicy}"
+
+              merge_plugin_list() {
+                command -v jq >/dev/null 2>&1 || {
+                  echo "ERROR: jq is required for merge_plugin_list()" >&2
+                  return 1
+                }
+                jq -c --arg add "$NEW_PLUGIN" --arg remove "$OLD_PLUGIN" \
+                  '((. // []) + [$add] | unique) - [$remove]'
+              }
+
+              is_furniture() {
+                local kind="$1" name="$2" type="${3:-}" sa="${4:-}"
+                case "$kind/$name" in
+                  ServiceAccount/default) return 0 ;;
+                  ServiceAccount/builder) return 0 ;;
+                  ServiceAccount/deployer) return 0 ;;
+                  ConfigMap/kube-root-ca.crt) return 0 ;;
+                  ConfigMap/openshift-service-ca.crt) return 0 ;;
+                  RoleBinding/system:deployers) return 0 ;;
+                  RoleBinding/system:image-builders) return 0 ;;
+                  RoleBinding/system:image-pullers) return 0 ;;
+                esac
+                # OpenShift project ServiceAccounts mint unlabeled token/dockercfg Secrets.
+                if [[ "$kind" == "Secret" ]]; then
+                  case "$type" in
+                    kubernetes.io/service-account-token|kubernetes.io/dockercfg|kubernetes.io/dockerconfigjson)
+                      case "$sa" in
+                        default|builder|deployer) return 0 ;;
+                      esac
+                      ;;
+                  esac
+                fi
+                return 1
+              }
+
+              patch_console_plugins() {
+                local existing merged patched
+                existing="$(oc get consoles.operator.openshift.io cluster -o json | jq -c '.spec.plugins // []')"
+                merged="$(printf '%s' "$existing" | merge_plugin_list)"
+                patched="$(jq -c -n --argjson merged "$merged" '{spec:{plugins:$merged}}')"
+                oc patch consoles.operator.openshift.io cluster --patch "$patched" --type=merge
+              }
+
+              delete_old_cluster_objects() {
+                oc delete consoleplugin "$OLD_PLUGIN" --ignore-not-found
+                oc delete clusterrole "$OLD_PATCHER" --ignore-not-found
+                oc delete clusterrolebinding "$OLD_PATCHER" --ignore-not-found
+              }
+
+              delete_owned_in_old_ns() {
+                oc get namespace "$OLD_NS" >/dev/null 2>&1 || return 0
+                oc delete ${RETIRE_NS_KINDS} \
+                  -n "$OLD_NS" \
+                  -l app.kubernetes.io/part-of="${OLD_PLUGIN}" \
+                  --ignore-not-found
+                oc delete ${RETIRE_NS_KINDS} \
+                  -n "$OLD_NS" \
+                  -l app="${OLD_PLUGIN}" \
+                  --ignore-not-found
+                oc delete ${RETIRE_NS_KINDS} \
+                  -n "$OLD_NS" \
+                  -l app=console-plugin-bff \
+                  --ignore-not-found
+                # Serving certs are created by the service-ca operator and have no plugin labels.
+                oc delete secret \
+                  -n "$OLD_NS" \
+                  console-plugin-vsp360-dcm-cert \
+                  console-plugin-bff-cert \
+                  --ignore-not-found
+                # Old default Helm release only.
+                oc delete secret -n "$OLD_NS" \
+                  -l owner=helm,name="${OLD_HELM_RELEASE}" \
+                  --ignore-not-found || true
+                oc get secret -n "$OLD_NS" -o json 2>/dev/null \
+                  | jq -r --arg p "sh.helm.release.v1.${OLD_HELM_RELEASE}." \
+                    '.items[] | select(.type=="helm.sh/release.v1" and (.metadata.name | startswith($p))) | .metadata.name' \
+                  | while read -r s; do
+                      [[ -n "$s" ]] && oc delete secret "$s" -n "$OLD_NS" --ignore-not-found
+                    done
+              }
+
+              emit_leftover_warning() {
+                local msg="$1"
+                echo "$msg" >&2
+                oc annotate namespace "$NEW_NS" \
+                  console-plugin.hitachi-vantara.com/vsp360-leftovers="$msg" \
+                  --overwrite || true
+
+                # Also emit an Event so operators can spot this in `oc get events -n $NEW_NS`.
+                # Best-effort only: do not block retirement on event creation failures.
+                # Use jq JSON (not an embedded YAML document) so this Job stays valid YAML.
+                local ns_uid=""
+                ns_uid="$(oc get namespace "$NEW_NS" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
+                jq -n \
+                  --arg ns "$NEW_NS" \
+                  --arg uid "$ns_uid" \
+                  --arg msg "$msg" \
+                  '{
+                    apiVersion: "v1",
+                    kind: "Event",
+                    metadata: {
+                      generateName: "console-plugin-hitachi-vantara-leftovers-",
+                      namespace: $ns
+                    },
+                    type: "Warning",
+                    reason: "LeftoverNamespaceResources",
+                    message: $msg,
+                    involvedObject: {
+                      apiVersion: "v1",
+                      kind: "Namespace",
+                      name: $ns,
+                      uid: $uid
+                    },
+                    source: { component: "console-plugin-hitachi-vantara-patcher" }
+                  }' | oc create -f - >/dev/null 2>&1 || true
+              }
+
+              maybe_delete_old_namespace() {
+                oc get namespace "$OLD_NS" >/dev/null 2>&1 || return 0
+
+                local leftovers=""
+                local json kind name type sa
+                if ! json="$(oc get ${RETIRE_NS_KINDS} \
+                  -n "$OLD_NS" -o json 2>/dev/null)"; then
+                  echo "WARN: failed listing leftovers in namespace ${OLD_NS}; skipping namespace delete" >&2
+                  emit_leftover_warning "leaving namespace ${OLD_NS} because leftover listing failed"
+                  return 0
+                fi
+
+                leftovers="$(printf '%s' "$json" | jq -r '.items[]? | [
+                    .kind,
+                    .metadata.name,
+                    (.type // ""),
+                    (.metadata.annotations["kubernetes.io/service-account.name"] // "")
+                  ] | @tsv' | while IFS=$'\t' read -r kind name type sa; do
+                    if is_furniture "$kind" "$name" "$type" "$sa"; then
+                      continue
+                    fi
+                    printf '%s/%s\n' "$kind" "$name"
+                  done)"
+
+                if [[ -z "${leftovers}" ]]; then
+                  oc delete namespace "$OLD_NS" --ignore-not-found --wait=false
+                  return 0
+                fi
+                emit_leftover_warning "leaving namespace ${OLD_NS} because of: $(echo "$leftovers" | tr '\n' ' ')"
+              }
+
+              retire_vsp360_main() {
+                patch_console_plugins
+                delete_old_cluster_objects
+                delete_owned_in_old_ns
+                maybe_delete_old_namespace
+              }
+
+              if [[ "${RETIRE_VSP360_RUN:-}" == "1" ]]; then
+                retire_vsp360_main
+              fi
