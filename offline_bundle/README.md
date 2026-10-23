@@ -31,6 +31,8 @@ The overall process involves the following steps:
 
           ```yaml
           docker:
+            ghcr.io/hitachi-vantara/hitachicsi-oci-oss: 
+              use-sigstore-attachments: true
             registry.hitachivantara.com:
               use-sigstore-attachments: true
             registry.k8s.io:
