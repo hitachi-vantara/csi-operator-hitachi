@@ -4,7 +4,7 @@
 #
 #   •	Hitachi Vantara CSI - Offline Bundle Script
 #
-#   This script facilitates the deployment of Hitachi Vantara CSI components 
+#   This script facilitates the deployment of Hitachi Vantara CSI components
 #   in air-gapped or offline environments. It provides
 #   functionality to create a self-contained bundle with all necessary
 #   container images and manifest files, and to prepare those assets for
@@ -72,7 +72,7 @@
 #===============================================================================
 
 # --- Script version ---
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="3.19.0"
 
 # --- Supported plugins ---
 SUPPORTED_PLUGINS=("hspc" "hspp" "hrpc")
@@ -171,6 +171,10 @@ get_images_hspc() {
     manifest_base="${plugin_path}/yaml"
   elif [[ -d "${plugin_path}/operator" && -d "${plugin_path}/sample" ]]; then
     manifest_base="${plugin_path}"
+  elif [[ -d "${plugin_path}/yaml/operator" && -d "${plugin_path}/yaml/sample/config" ]]; then
+    manifest_base="${plugin_path}/yaml"
+  elif [[ -d "${plugin_path}/operator" && -d "${plugin_path}/sample/config" ]]; then
+    manifest_base="${plugin_path}"
   else
     log "Error: Could not find 'operator' and 'sample' folders for HSPC version '$plugin_version'."
     lognexit "Checked paths: ${plugin_path}/yaml/ and ${plugin_path}/"
@@ -181,14 +185,25 @@ get_images_hspc() {
 
   if [[ -n "$k8s_version" ]]; then
     # k8s version is specified, look for a specific file
-    driver_files="${manifest_base}/sample/hspc-k8s${k8s_version}.yaml"
+    if [[ -f "${manifest_base}/sample/config/hspc-k8s${k8s_version}.yaml" ]]; then
+      driver_files="${manifest_base}/sample/config/hspc-k8s${k8s_version}.yaml"
+    else
+      driver_files="${manifest_base}/sample/hspc-k8s${k8s_version}.yaml"
+    fi
     if [[ ! -f "$driver_files" ]]; then
       lognexit "Error: Specified driver manifest not found: $driver_files"
     fi
   else
     # k8s version is not specified, glob all driver manifests
     driver_files="${manifest_base}/sample/hspc-k8s"*.yaml
-    driver_files+=" ${manifest_base}/sample/consoleplugin-ocp-ui.yaml"
+    if compgen -G "${manifest_base}/sample/config/hspc-k8s*.yaml" > /dev/null; then
+      driver_files="${manifest_base}/sample/config/hspc-k8s"*.yaml
+    fi
+    if [[ -f "${manifest_base}/sample/openshift/consoleplugin-ocp-ui.yaml" ]]; then
+      driver_files+=" ${manifest_base}/sample/openshift/consoleplugin-ocp-ui.yaml"
+    else
+      driver_files+=" ${manifest_base}/sample/consoleplugin-ocp-ui.yaml"
+    fi
     # Check if the glob found any files
     if ! ls $driver_files &> /dev/null; then
         lognexit "Error: No driver manifests found in ${manifest_base}/sample/"
@@ -279,10 +294,52 @@ create_bundle() {
     safe_name=$(echo "$img" | sed 's|[/:@]|_|g')
     local img_dir="${temp_dir}/${images_folder}/${safe_name}"
     log "  Copying $img -> ${safe_name}"
-    skopeo copy --all --preserve-digests \
-      "docker://${img}" "dir:${img_dir}" >> "$LOG_FILE" 2>&1 \
-      || lognexit "Error: skopeo copy failed for $img"
-    echo "\"${img}\",\"${safe_name}\"" >> "$map_file"
+    local copy_success=false
+    local is_redhat_image=false
+    [[ "$img" == registry.redhat.io/* ]] && is_redhat_image=true
+
+    for attempt in 1 2 3; do
+      if skopeo copy --all --preserve-digests \
+        "docker://${img}" "dir:${img_dir}" >> "$LOG_FILE" 2>&1; then
+        copy_success=true
+        break
+      fi
+
+      if [[ "$is_redhat_image" != true ]]; then
+        lognexit "Error: skopeo copy failed for $img"
+      fi
+
+      if [[ "$attempt" -eq 3 ]]; then
+        log "ERROR: Red Hat Registry authentication failed after 3 attempts for $img."
+        log "WARNING: Skipping $img. Bundle generation will continue without this image."
+        break
+      fi
+
+      log "WARNING: Red Hat Registry authentication failed for $img (attempt ${attempt}/3)."
+      echo
+      echo "Red Hat Registry authentication is required for:"
+      echo "  $img"
+      echo "Would you like to login to registry.redhat.io and retry? [Y/n]: "
+      read -r retry_auth
+
+      if [[ "$retry_auth" =~ ^[Nn]$ ]]; then
+        log "WARNING: User chose not to retry Red Hat Registry authentication for $img. Skipping image."
+        break
+      fi
+
+      log "Attempting Red Hat Registry login..."
+      if ! podman login registry.redhat.io; then
+        log "WARNING: Red Hat Registry login failed for $img."
+      else
+        log "Red Hat Registry login completed. Retrying image copy."
+      fi
+    done
+
+    if [[ "$copy_success" == true ]]; then
+      echo "\"${img}\",\"${safe_name}\"" >> "$map_file"
+    else
+      rm -rf "$img_dir"
+    fi
   done
 
   log "Copying installation files from ${plugin_path}..."
@@ -514,18 +571,41 @@ update_manifests_hspc() {
   fi
 
   # Sample manifests
-  local sample_files="${hspc_path}/sample/hspc-k8s"*.yaml
-  for sample_file in $sample_files; do
-    if [[ -f "$sample_file" ]]; then
-      # Skip already generated offline manifests
-      [[ "$sample_file" == *-offline.yaml ]] && continue
-      local filename=$(basename "$sample_file")
-      local offline_file="${hspc_path}/sample/${filename%.*}-offline.yaml"
-      log "Creating offline sample manifest: $(basename "$offline_file")"
-      cp "$sample_file" "$offline_file"
-      rewrite_images "$offline_file"
+  local sample_files
+  if [[ -d "${hspc_path}/sample/config" ]]; then
+    sample_files="${hspc_path}/sample/config/hspc-k8s"*.yaml
+    for sample_file in $sample_files; do
+      if [[ -f "$sample_file" ]]; then
+        # Skip already generated offline manifests
+        [[ "$sample_file" == *-offline.yaml ]] && continue
+        local filename=$(basename "$sample_file")
+        local offline_file="${hspc_path}/sample/config/${filename%.*}-offline.yaml"
+        log "Creating offline sample manifest: $(basename "$offline_file")"
+        cp "$sample_file" "$offline_file"
+        rewrite_images "$offline_file"
+      fi
+    done
+    if [[ -f "${hspc_path}/sample/openshift/consoleplugin-ocp-ui.yaml" ]]; then
+      local consoleplugin_file="${hspc_path}/sample/openshift/consoleplugin-ocp-ui.yaml"
+      local consoleplugin_offline_file="${hspc_path}/sample/openshift/consoleplugin-ocp-ui-offline.yaml"
+      log "Creating offline sample manifest: consoleplugin-ocp-ui-offline.yaml"
+      cp "$consoleplugin_file" "$consoleplugin_offline_file"
+      rewrite_images "$consoleplugin_offline_file"
     fi
-  done
+  else
+    sample_files="${hspc_path}/sample/hspc-k8s"*.yaml
+    for sample_file in $sample_files; do
+      if [[ -f "$sample_file" ]]; then
+        # Skip already generated offline manifests
+        [[ "$sample_file" == *-offline.yaml ]] && continue
+        local filename=$(basename "$sample_file")
+        local offline_file="${hspc_path}/sample/${filename%.*}-offline.yaml"
+        log "Creating offline sample manifest: $(basename "$offline_file")"
+        cp "$sample_file" "$offline_file"
+        rewrite_images "$offline_file"
+      fi
+    done
+  fi
 
   log "--- Manifest files updated successfully ---"
 }
@@ -601,7 +681,11 @@ create_offline_crd() {
   local sample_offline_file
   if [[ -n "$k8s_version" ]]; then
     # Specific k8s version provided, look for matching offline file
-    sample_offline_file="${hspc_path}/sample/hspc-k8s${k8s_version}-offline.yaml"
+    if [[ -f "${hspc_path}/sample/config/hspc-k8s${k8s_version}-offline.yaml" ]]; then
+      sample_offline_file="${hspc_path}/sample/config/hspc-k8s${k8s_version}-offline.yaml"
+    else
+      sample_offline_file="${hspc_path}/sample/hspc-k8s${k8s_version}-offline.yaml"
+    fi
     if [[ ! -f "$sample_offline_file" ]]; then
       log "Warning: Offline sample manifest not found for k8s version $k8s_version: $sample_offline_file"
       return
@@ -628,7 +712,8 @@ create_offline_crd() {
   local csi_resizer_image=$(grep -A 5 "name: csi-resizer" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
   local csi_snapshotter_image=$(grep -A 5 "name: csi-snapshotter" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
   local driver_registrar_image=$(grep -A 15 "name: driver-registrar" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
-
+  local telemetry_image=$(grep -A 15 "name: hspc-csi-telemetry-service" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
+  local config_operator_image=$(grep -A 15 "name: hspc-config-operator" "$sample_offline_file" | grep "image:" | head -1 | awk '{print $2}' | sed 's/"//g')
   # First, remove the existing spec: {} line from the CRD file
   sed -i '/^spec: {}$/d' "$offline_crd_file"
 
@@ -651,6 +736,10 @@ spec:
         image: ${csi_resizer_image}
       - name: csi-snapshotter
         image: ${csi_snapshotter_image}
+      - name: hspc-csi-telemetry-service
+        image: ${telemetry_image}
+      - name: hspc-config-operator
+        image: ${config_operator_image}
   node:
     containers:
       - name: hspc-csi-driver
