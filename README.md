@@ -274,10 +274,9 @@ For complete offline installation instructions, examples, and registry configura
 ## CSI Deploy Wizard
 
 The `csi-deploy-wizard/` directory contains the CSI deployment wizard.
+Live site: hitachi-vantara.github.io/csi-deploy-wizard
 
-It is intended to provide a guided deployment experience for Hitachi Vantara CSI plug-ins.
-
-Refer to the directory for the wizard's implementation, setup instructions, supported deployment options, and usage documentation.
+Refer to the directory for the wizard's implementation (https://github.com/hitachi-vantara/csi-operator-hitachi/blob/main/csi-deploy-wizard/README.md)
 
 ## Verifying the Installation
 
