@@ -1,185 +1,421 @@
 # Hitachi Vantara CSI Operator
 
-Kubernetes and OpenShift operator, manifests, and tooling for deploying the **Hitachi Vantara Container Storage Interface (CSI)** family of plug-ins.
+The **Hitachi Vantara CSI Operator** repository provides deployment resources, operators, manifests, and utilities for deploying Hitachi Vantara storage plug-ins in Kubernetes and Red Hat OpenShift environments.
 
-This repository provides the deployment artifacts for the following plug-ins:
+The repository supports the following products:
 
-| Plug-in | Abbreviation | Directory | Purpose |
-|---|---|---|---|
-| Hitachi Storage Plug-in for Containers (Hitachi Vantara CSI) | **HSPC** | [`hspc/`](./hspc) | CSI driver and operator for dynamic provisioning of persistent volumes on Hitachi storage |
-| Hitachi Replication Plug-in for Containers | **HRPC** | [`hrpc/`](./hrpc) | Replication support for persistent volumes provisioned on Hitachi storage |
-| Hitachi Storage Plug-in for Prometheus | **HSPP** | [`hspp/`](./hspp) | Exposes Hitachi storage metrics to Prometheus |
+| Product | Abbreviation | Description |
+|---|---|---|
+| Hitachi Storage Plug-in for Containers | HSPC | Provides persistent storage integration with Hitachi Vantara storage systems through the Container Storage Interface (CSI). |
+| Hitachi Replication Plug-in for Containers | HRPC | Provides replication capabilities for Kubernetes workloads using Hitachi Vantara storage. |
+| Hitachi Storage Plug-in for Prometheus | HSPP | Provides storage monitoring and metrics integration with Prometheus. |
 
----
+The repository also includes a CSI deployment wizard, offline installation utilities, digital signature verification resources, and log collection tools.
 
 ## Table of Contents
 
+- [Overview](#overview)
+- [Supported Products](#supported-products)
 - [Repository Structure](#repository-structure)
 - [Prerequisites](#prerequisites)
+- [Getting Started](#getting-started)
 - [Installation](#installation)
-  - [Online installation](#online-installation)
-  - [Offline (air-gapped) installation](#offline-air-gapped-installation)
+  - [Online Installation](#online-installation)
+  - [Offline Installation](#offline-air-gapped-installation)
+- [CSI Deploy Wizard](#csi-deploy-wizard)
 - [Verifying the Installation](#verifying-the-installation)
 - [Log Collection](#log-collection)
+- [Digital Signature Verification](#digital-signature-verification)
+- [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [Support](#support)
-- [License](#license)
 
----
+## Overview
+
+Hitachi Vantara CSI Operator provides the resources required to deploy and manage Hitachi Vantara storage integrations in Kubernetes and OpenShift environments.
+
+Key capabilities include:
+
+- Deployment resources for HSPC, HRPC, and HSPP.
+- Operator and Custom Resource deployment manifests.
+- CSI deployment wizard.
+- Online and offline installation support.
+- Private container registry support for air-gapped environments.
+- Digital signature verification resources.
+- Diagnostic log collection utilities.
+
+## Supported Products
+
+### HSPC – Hitachi Storage Plug-in for Containers
+
+HSPC integrates Hitachi Vantara storage systems with Kubernetes through the Container Storage Interface (CSI).
+
+It enables Kubernetes workloads to consume persistent storage through Kubernetes PersistentVolumes and PersistentVolumeClaims.
+
+### HRPC – Hitachi Replication Plug-in for Containers
+
+HRPC provides replication integration for Kubernetes workloads using Hitachi Vantara storage replication capabilities.
+
+### HSPP – Hitachi Storage Plug-in for Prometheus
+
+HSPP provides storage monitoring and metrics integration with Prometheus, enabling storage-related metrics to be collected and monitored.
 
 ## Repository Structure
 
-```
+```text
 csi-operator-hitachi/
-├── .github/workflows/          # CI workflows
-├── digital_signature/          # Digital signature artifacts for release verification
-├── hspc/                       # Storage Plug-in for Containers (CSI) manifests, versioned
-├── hrpc/                       # Replication Plug-in for Containers manifests
-├── hspp/                       # Storage Plug-in for Prometheus manifests
+├── .github/
+│   └── workflows/              # GitHub Actions workflows
+├── csi-deploy-wizard/          # CSI deployment wizard
+├── digital_signature/          # Digital signature verification resources
+├── hspc/                       # Hitachi Storage Plug-in for Containers
+├── hrpc/                       # Hitachi Replication Plug-in for Containers
+├── hspp/                       # Hitachi Storage Plug-in for Prometheus
 ├── log_collector/
-│   └── hspc/
-│       └── Hitachi-CSI-Log-Bundle/   # Log collection utility for HSPC
-├── hvcsi-offline-bundle.sh     # Script for building/pushing air-gapped install bundles
-├── Offline-bundle-README.md    # Detailed air-gapped installation guide
+│   └── hspc/                   # HSPC log collection utilities
+├── hvcsi-offline-bundle.sh     # Offline bundle creation and deployment utility
+├── Offline-bundle-README.md    # Offline installation guide
 └── README.md
 ```
 
----
-
 ## Prerequisites
 
-- A supported Kubernetes or OpenShift cluster (the manifests are provided per Kubernetes minor version, e.g. 1.32, 1.33, 1.34).
-- `kubectl` (Kubernetes) or `oc` (OpenShift) with cluster-admin access.
-- Network connectivity from cluster nodes to the Hitachi storage system(s).
-- Access to the container images used by the plug-ins:
-  - `registry.hitachivantara.com`
-  - `registry.k8s.io` (CSI sidecar images)
-  - For HSPP additionally: `quay.io` and `docker.io`
+The prerequisites depend on the selected plug-in and deployment environment.
 
-For storage-side requirements (supported storage models, credentials, host group/port configuration, etc.), refer to the product guides listed under [Documentation](#documentation).
+Generally, the following are required:
 
----
+- Kubernetes or Red Hat OpenShift cluster.
+- `kubectl` or `oc` command-line utility.
+- Appropriate cluster permissions to deploy operators, CRDs, RBAC resources, and workloads.
+- Network connectivity between Kubernetes nodes and Hitachi Vantara storage systems.
+- Access to the required container image registries.
+- Storage system configuration and connectivity appropriate for the selected plug-in.
+
+For offline deployments, additional requirements include:
+
+- Linux host with access to the Internet for bundle creation.
+- Docker or Podman.
+- Git.
+- Access to a private container registry.
+- Container image transfer capability to the target environment.
+
+Refer to the respective product documentation for detailed requirements.
+
+## Getting Started
+
+Clone the repository:
+
+```bash
+git clone https://github.com/hitachi-vantara/csi-operator-hitachi.git
+```
+
+Navigate to the repository:
+
+```bash
+cd csi-operator-hitachi
+```
+
+Explore the available components:
+
+```bash
+ls -l
+```
+
+The repository contains separate directories for each plug-in, deployment wizard, and supporting utilities.
 
 ## Installation
 
-### Online installation
+Installation procedures depend on the selected plug-in, product version, and target Kubernetes/OpenShift environment.
 
-1. Clone the repository:
+### Online Installation
+
+1. Clone the repository.
 
    ```bash
    git clone https://github.com/hitachi-vantara/csi-operator-hitachi.git
    cd csi-operator-hitachi
    ```
 
-2. Change to the directory for the plug-in and version you want to install (for example, `hspc/<version>/`).
+2. Navigate to the required plug-in and version directory.
 
-3. **Kubernetes** – install the operator, then create an HSPC instance:
+   For example, for HSPC:
 
    ```bash
-   cd <hspc_version>/operator/
+   cd hspc/<version>/operator/
+   ```
+
+3. Install the HSPC operator.
+
+   ```bash
    kubectl create -f hspc-operator-namespace.yaml
    kubectl create -f hspc-operator.yaml
-   kubectl get pods -n hspc-operator-system
+   ```
 
+4. Verify the operator deployment.
+
+   ```bash
+   kubectl get pods -n hspc-operator-system
+   ```
+
+5. Deploy the HSPC Custom Resource.
+
+   ```bash
    kubectl apply -f hspc_v1_hspc.yaml
    ```
 
-   **OpenShift** – the operator can be installed from **OperatorHub**, or from the CLI using the operator and sample YAMLs.
+6. Configure the required storage credentials, StorageClass, and other resources according to the HSPC Installation and User Guide.
 
-4. Create the storage secret, `StorageClass`, and (optionally) `VolumeSnapshotClass` as described in the *Storage Plug-in for Containers Installation and User Guide*.
+**Note:** The above commands are illustrative of the HSPC installation workflow. Manifest names and procedures may vary between product releases. Always refer to the installation documentation for the selected version.
 
-> **Note:** Exact manifest file names can vary by release. Check the contents of the version directory you are installing from.
+For HRPC and HSPP, navigate to their respective directories and follow the corresponding product installation instructions.
 
-### Offline (air-gapped) installation
+### Offline (Air-Gapped) Installation
 
-For clusters without Internet access, use the `hvcsi-offline-bundle.sh` script. It works in three phases:
+The repository provides `hvcsi-offline-bundle.sh` to support deployments in environments without direct Internet connectivity.
 
-1. **Create the bundle** on a Linux host with Internet access, Docker or Podman, and Git:
+The offline installation workflow consists of three phases:
 
-   ```bash
-   # HSPC bundle for a specific version, all supported Kubernetes versions
-   ./hvcsi-offline-bundle.sh -c -v v3.18.2
+1. Create the offline bundle.
+2. Push container images to a private registry.
+3. Deploy the plug-in using the generated offline manifests.
 
-   # HSPC bundle for a specific Kubernetes version
-   ./hvcsi-offline-bundle.sh -c -v v3.18.2 -k 1.34
+#### Phase 1: Create the Offline Bundle
 
-   # Bundles for the latest version of all three plug-ins
-   ./hvcsi-offline-bundle.sh -c -t all
+Run the following commands on a Linux host with Internet access, Git, and Docker or Podman.
 
-   # HRPC or HSPP
-   ./hvcsi-offline-bundle.sh -c -t hrpc -v v3.17.4
-   ./hvcsi-offline-bundle.sh -c -t hspp -v v3.17.4
-   ```
+**Create an HSPC bundle:**
 
-   Output: `hvcsi-<plugin>-<version>-bundle.tar.gz`
+```bash
+./hvcsi-offline-bundle.sh -c -v v3.18.2
+```
 
-2. **Push images to a private registry.** Transfer and extract the bundle on a host that can reach your registry, then run:
+**Create an HSPC bundle for a specific Kubernetes version:**
 
-   ```bash
-   tar -xvf hvcsi-hspc-v3.18.2-bundle.tar.gz
-   cd hvcsi-hspc-v3.18.2-bundle
+```bash
+./hvcsi-offline-bundle.sh -c -v v3.18.2 -k 1.34
+```
 
-   ./hvcsi-offline-bundle.sh -p -r <registry>/<repository>
+**Create bundles for all three plug-ins:**
 
-   # For self-signed or HTTP registries
-   HSPC_INSECURE_REG=1 ./hvcsi-offline-bundle.sh -p -r <registry>/<repository>
-   ```
+```bash
+./hvcsi-offline-bundle.sh -c -t all
+```
 
-   The script tags and pushes the images, generates `*-offline.yaml` manifests that reference your registry, and verifies image digests.
+**Create an HRPC bundle:**
 
-3. **Install** on the cluster using the generated offline manifests. On OpenShift, create an `ImageDigestMirrorSet` and `ImageTagMirrorSet` first so the cluster pulls from your mirror.
+```bash
+./hvcsi-offline-bundle.sh -c -t hrpc -v v3.17.4
+```
 
-See **[Offline-bundle-README.md](./Offline-bundle-README.md)** for the full step-by-step procedure, including OpenShift IDMS/ITMS examples.
+**Create an HSPP bundle:**
 
----
+```bash
+./hvcsi-offline-bundle.sh -c -t hspp -v v3.17.4
+```
+
+The generated archive follows this naming convention:
+
+```text
+hvcsi-<plugin>-<version>-bundle.tar.gz
+```
+
+#### Phase 2: Push Images to a Private Registry
+
+Transfer the generated bundle to a host that has access to the target private container registry.
+
+Extract the bundle:
+
+```bash
+tar -xvf hvcsi-hspc-v3.18.2-bundle.tar.gz
+```
+
+Navigate to the extracted directory:
+
+```bash
+cd hvcsi-hspc-v3.18.2-bundle
+```
+
+Push the images to the private registry:
+
+```bash
+./hvcsi-offline-bundle.sh -p -r <registry>/<repository>
+```
+
+For self-signed or HTTP registries:
+
+```bash
+HSPC_INSECURE_REG=1 ./hvcsi-offline-bundle.sh -p -r <registry>/<repository>
+```
+
+The utility handles the following operations:
+
+- Loads the container images from the offline bundle.
+- Tags and pushes images to the specified private registry.
+- Updates image references in the generated installation manifests.
+- Generates deployment resources referencing the private registry.
+- Verifies image digests between the source and destination registries.
+
+#### Phase 3: Deploy on Kubernetes/OpenShift
+
+Transfer the generated deployment resources to the target cluster environment.
+
+For OpenShift environments, configure the required image mirroring resources:
+
+- ImageDigestMirrorSet (IDMS).
+- ImageTagMirrorSet (ITMS).
+
+Ensure that the target cluster nodes can access the private registry.
+
+Apply the generated installation manifests and follow the respective product installation procedure.
+
+For complete offline installation instructions, examples, and registry configuration details, refer to [Offline-bundle-README.md](./Offline-bundle-README.md).
+
+## CSI Deploy Wizard
+
+The `csi-deploy-wizard/` directory contains the CSI deployment wizard.
+
+It is intended to provide a guided deployment experience for Hitachi Vantara CSI plug-ins.
+
+Refer to the directory for the wizard's implementation, setup instructions, supported deployment options, and usage documentation.
 
 ## Verifying the Installation
 
-```bash
-kubectl get hspc -n kube-system
-# NAME   READY   AGE
-# hspc   true    19h
+After installation, verify that the operator and CSI components are running successfully.
 
-kubectl get pods -n kube-system
-# hspc-csi-controller-...   6/6   Running
-# hspc-csi-node-...         2/2   Running   (one per worker node)
+**Check operator pods:**
+
+```bash
+kubectl get pods -A
 ```
 
-The HSPC resource should report `READY: true`, the controller pod should be fully ready, and one node pod should be running on each worker node.
+**Check HSPC Custom Resource:**
 
----
+```bash
+kubectl get hspc -n kube-system
+```
+
+**Check CSI controller and node pods:**
+
+```bash
+kubectl get pods -n kube-system
+```
+
+**Check StorageClasses:**
+
+```bash
+kubectl get storageclass
+```
+
+**Check PersistentVolumeClaims:**
+
+```bash
+kubectl get pvc -A
+```
+
+For OpenShift environments, use the corresponding `oc` commands.
 
 ## Log Collection
 
-A log collection utility for HSPC is available in
-[`log_collector/hspc/Hitachi-CSI-Log-Bundle`](./log_collector/hspc/Hitachi-CSI-Log-Bundle). Use it to gather diagnostic logs when opening a support case.
+The repository provides HSPC log collection utilities under:
 
----
+```text
+log_collector/hspc/Hitachi-CSI-Log-Bundle/
+```
+
+These utilities help collect diagnostic information required for troubleshooting and technical support cases.
+
+Refer to the documentation provided within the log collector directory for usage instructions.
+
+## Digital Signature Verification
+
+Digital signature verification resources are available under:
+
+```text
+digital_signature/
+```
+
+Refer to the directory documentation for the applicable verification procedure.
+
+## Troubleshooting
+
+The following commands can help identify common Kubernetes and OpenShift deployment issues.
+
+**Check pod status:**
+
+```bash
+kubectl get pods -A
+```
+
+**Inspect pod details:**
+
+```bash
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+**Check container logs:**
+
+```bash
+kubectl logs <pod-name> -n <namespace>
+```
+
+**Check recent cluster events:**
+
+```bash
+kubectl get events -A --sort-by='.lastTimestamp'
+```
+
+**Check deployments:**
+
+```bash
+kubectl get deployments -A
+```
+
+**Check Custom Resource Definitions:**
+
+```bash
+kubectl get crds
+```
+
+For CSI-related issues, verify:
+
+- CSI controller and node pod status.
+- Storage system connectivity.
+- Storage credentials and configuration.
+- StorageClass and PersistentVolumeClaim configuration.
+- Container image availability.
+- CSI sidecar and driver logs.
+
+For additional diagnostic information, use the log collection utilities provided in this repository.
 
 ## Documentation
 
-Product documentation is available at [docs.hitachivantara.com](https://docs.hitachivantara.com):
+For detailed product installation and configuration instructions, refer to the official Hitachi Vantara documentation.
 
-- Storage Plug-in for Containers Installation and User Guide
-- Replication Plug-in for Containers Configuration Guide
-- Storage Plug-in for Prometheus Quick Reference Guide
-
----
+- [Hitachi Vantara Documentation](https://docs.hitachivantara.com/)
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [Red Hat OpenShift Documentation](https://docs.openshift.com/)
+- [Hitachi Vantara CSI Operator Repository](https://github.com/hitachi-vantara/csi-operator-hitachi)
 
 ## Contributing
 
-Issues and pull requests are welcome. Please open an issue to discuss significant changes before submitting a pull request.
+Contributions to the repository are welcome.
 
----
+For significant changes:
+
+1. Open an issue to discuss the proposed changes.
+2. Create a feature or bug-fix branch.
+3. Implement and test the changes.
+4. Submit a pull request for review.
+
+Ensure that changes follow the repository's existing conventions and do not introduce incompatible deployment resources.
 
 ## Support
 
-- For product issues, contact Hitachi Vantara support through your normal support channel.
-- For problems with the contents of this repository, please [open an issue](https://github.com/hitachi-vantara/csi-operator-hitachi/issues).
+For product-related questions, installation assistance, or technical issues, contact Hitachi Vantara support through the appropriate support channels.
+
+For repository-related issues, raise an issue in the [GitHub repository](https://github.com/hitachi-vantara/csi-operator-hitachi/issues).
 
 ---
 
-## License
-
-_Add license information here (e.g., link to a `LICENSE` file) — none was found in the repository root._
+**Repository:** [hitachi-vantara/csi-operator-hitachi](https://github.com/hitachi-vantara/csi-operator-hitachi)
