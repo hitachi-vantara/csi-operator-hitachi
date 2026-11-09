@@ -99,8 +99,6 @@ The repository contains separate directories for each plug-in, deployment wizard
 ## Installation
 Please refer to the latest installation guide in docs.hitachivantara.com 
 
-For HRPC and HSPP, navigate to their respective directories to find the respective deployment resources
-
 ### Offline (Air-Gapped) Installation
 The Offline installation directory has the deployment resources needed to install in an Air-Gapped environment .
 Please refer to the latest installation guide in docs.hitachivantara.com 
@@ -111,7 +109,7 @@ The `csi-deploy-wizard/` directory contains the CSI deployment wizard. The Live 
 
 It is intended to provide a guided deployment experience for Hitachi Vantara CSI plug-ins.
 
-Refer to the directory to find the README for usage documentation . csi-deploy-wizard/README.md
+Refer to the directory to find the README for usage documentation . https://github.com/hitachi-vantara/csi-operator-hitachi/blob/main/csi-deploy-wizard/README.md
 
 
 ## Log Collection
