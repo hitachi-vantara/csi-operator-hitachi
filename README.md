@@ -17,7 +17,6 @@ The repository also includes a CSI deployment wizard, offline installation utili
 - [Overview](#overview)
 - [List of Plugins ](#list-of-plugins)
 - [Repository Structure](#repository-structure)
-- [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
 - [Offline Installation](#offline-air-gapped-installation)
 - [CSI Deploy Wizard](#csi-deploy-wizard)
@@ -112,7 +111,7 @@ The `csi-deploy-wizard/` directory contains the CSI deployment wizard. The Live 
 
 It is intended to provide a guided deployment experience for Hitachi Vantara CSI plug-ins.
 
-Refer to the directory to find the README for usage documentation . 
+Refer to the directory to find the README for usage documentation . csi-deploy-wizard/README.md
 
 
 ## Log Collection
