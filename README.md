@@ -97,11 +97,12 @@ ls -l
 The repository contains separate directories for each plug-in, deployment wizard, and supporting utilities.
 
 ## Installation
-Please refer to the latest installation guide in docs.hitachivantara.com 
+Please refer to the latest installation guide in [Hitachi Vantara Documentation](https://docs.hitachivantara.com/)
 
 ### Offline (Air-Gapped) Installation
 The Offline installation directory has the deployment resources needed to install in an Air-Gapped environment .
-Please refer to the latest installation guide in docs.hitachivantara.com 
+Please refer to the latest installation guide in the [Hitachi Vantara Documentation](https://docs.hitachivantara.com/)
+)
 
 ## CSI Deploy Wizard
 
@@ -146,5 +147,3 @@ For product-related questions, installation assistance, or technical issues, con
 For repository-related issues, raise an issue in the [GitHub repository](https://github.com/hitachi-vantara/csi-operator-hitachi/issues).
 
 ---
-
-**Repository:** [hitachi-vantara/csi-operator-hitachi](https://github.com/hitachi-vantara/csi-operator-hitachi)
