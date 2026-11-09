@@ -15,20 +15,15 @@ The repository also includes a CSI deployment wizard, offline installation utili
 ## Table of Contents
 
 - [Overview](#overview)
-- [List of Plugins Products](#list-of-plugins)
+- [List of Plugins ](#list-of-plugins)
 - [Repository Structure](#repository-structure)
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
-- [Installation](#installation)
-  - [Online Installation](#online-installation)
-  - [Offline Installation](#offline-air-gapped-installation)
+- [Offline Installation](#offline-air-gapped-installation)
 - [CSI Deploy Wizard](#csi-deploy-wizard)
-- [Verifying the Installation](#verifying-the-installation)
 - [Log Collection](#log-collection)
 - [Digital Signature Verification](#digital-signature-verification)
-- [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
-- [Contributing](#contributing)
 - [Support](#support)
 
 ## Overview
